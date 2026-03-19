@@ -416,7 +416,7 @@ global_enrichment_results_df <- lapply(enrichment_results, function(x) {
   purrr::map_df(., .f = as.data.frame)
 ```
 
-```{r Load Module GO GSEA, eval = TRUE, echo = FALSE}
+```{r Load Cluster GO GSEA, eval = TRUE, echo = FALSE}
 load("../../analysis/R/hClust/HierarchicalCluster_GO_GSEA.rda")
 global_enrichment_results_df <- HierarchicalCluster_GO_GSEA
 rm(HierarchicalCluster_GO_GSEA)
@@ -458,7 +458,7 @@ subclusters_from_hclust <- function(
   n_sub_per_cluster = 3L
 ) {
   # number of existing clusters
-  n_clusters <- length(unique(modules_df$cluster))
+  n_clusters <- length(unique(clusters_df$cluster))
 
   # total number of clusters in the finer cut
   K_big <- n_clusters * n_sub_per_cluster
@@ -698,15 +698,15 @@ visNetwork::visNetwork(
     y = coords[,2],
     group = base::interaction(
                         {
-                          x <- igraph::V(g)$module
+                          x <- igraph::V(g)$cluster
                           if (length(x) == 0) rep("", igraph::vcount(g)) else x
                         },
                         {
-                          x <- igraph::V(g)$submodule
+                          x <- igraph::V(g)$subcluster
                           if (length(x) == 0) {
                             rep("", igraph::vcount(g))
                           } else {
-                            ifelse(nzchar(x), x, igraph::V(g)$module)
+                            ifelse(nzchar(x), x, igraph::V(g)$cluster)
                           }
                         },
                         drop = TRUE,
@@ -733,9 +733,9 @@ visNetwork::visNetwork(
         term <- igraph::V(g)[v]$name
         saint_value <- igraph::V(g)[v]$score_mass
         if (is.na(saint_value)) saint_value <- 0
-        is_module <- nzchar(igraph::V(g)[v]$submodule)
+        is_cluster <- nzchar(igraph::V(g)[v]$subcluster)
 
-        if (is_module) {
+        if (is_cluster) {
           paste0(
             "<div style='background-color:#ffffff;color:#1f4e79;",
             "padding:6px 10px;border-radius:6px;",
