@@ -1,5 +1,5 @@
 ---
-title: "Spectral Clustering vignette"
+title: "Spectral Clustering"
 author: "Erik Larsen"
 date: "`r Sys.Date()`"
 always_allow_html: true
@@ -14,10 +14,6 @@ output:
     latex_engine: xelatex
   md_document:
     variant: gfm
-vignette: >
-  %\VignetteIndexEntry{Spectral Clustering vignette}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
 ---
 
 # Overview
@@ -41,7 +37,7 @@ knitr::opts_chunk$set(
   fig.width = 10,
   fig.height = 12,
   dev = c("png", "pdf"),
-  fig.path = "../../analysis/R/SpectralClustering/"
+  fig.path = "~/R/SpectralClustering/"
 )
 ```
 
@@ -83,7 +79,7 @@ options(stringsAsFactors = FALSE)
 
 ```{r Data Load}
 # Load precomputed objects from preprocessing
-load("../../analysis/R/precompute_objects.rda")
+load("/R/precompute_objects.rda")
 ```
 
 ```{r Second Data Load, echo = FALSE}
@@ -734,7 +730,7 @@ spectral_enrichment_results_df
 ```
 
 ```{r Load Module GO GSEA, eval = TRUE, echo = FALSE}
-load("../../analysis/R/SpectralClustering/spectralCluster_GO_GSEA.rda")
+load("~/R/SpectralClustering/spectralCluster_GO_GSEA.rda")
 ```
 
 **No GO Terms were enriched** in the only cluster of the spectral clustering method. 

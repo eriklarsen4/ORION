@@ -1,0 +1,99 @@
+---
+title: "HDBSCAN vignette"
+author: "Erik Larsen"
+date: "`r Sys.Date()`"
+always_allow_html: true
+output:
+  html_document:
+    toc: true
+    fig_width: 10
+    fig_height: 10
+  pdf_document:
+    fig_width: 10
+    fig_height: 10
+    latex_engine: xelatex
+  md_document:
+    variant: gfm
+vignette: >
+  %\VignetteIndexEntry{HDBSCAN vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Overview
+
+This markdown was developed to formally document an ad-hoc cluster analysis for 
+TMEM184B immunoprecipitation tandem mass-spec experiments for 
+**Dr. Martha Bhattacharya's lab** at the **University of Arizona** for the
+endolysosomal paper under revision (2025-02-28) for the Journal of Cell Science
+
+This vignette documents the `Spectral Clustering` of this IPMS data
+
+```{r reset-shiny-mode, include=FALSE}
+options(htmlwidgets.shinyMode = FALSE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 10,
+  fig.height = 12,
+  dev = c("png", "pdf"),
+  fig.path = "../../analysis/R/SpectralClustering/"
+)
+```
+
+## Attach Packages
+
+```{r Attach Packages, message=F,warning=F}
+# data/wrangling
+library(tidyverse)
+library(Endo)
+library(DT)
+
+  ## (hdbscan)
+library(dbscan)
+
+# GSEA/viz
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ReactomePA)
+library(AnnotationDbi)
+library(cowplot)
+
+# progress bar
+library(progressr)
+
+# parallelization
+library(future)
+library(future.apply)
+
+# network viz
+library(visNetwork)
+
+options(stringsAsFactors = FALSE)
+```
+
+## Load the Pre-Computed Data
+
+```{r Data Load}
+# Load precomputed objects from preprocessing
+load("../../analysis/R/precompute_objects.rda")
+```
+
+```{r Second Data Load, echo = FALSE}
+rm(IPMS_mat_log)
+rm(IPMS_mat_Z)
+hSAINT <- hSAINT |> 
+  dplyr::mutate(stat_class = dplyr::case_when(score > 0.5 & 
+                                                lit_flag + CRAPome_flag <= 1 ~ 'High SAINT, Low Contamination',
+                                              score < 0.5 &
+                                                lit_flag + CRAPome_flag <= 1 ~ 'Low SAINT, Low Contamination',
+                                              score > 0.5 &
+                                                lit_flag + CRAPome_flag > 1 ~ 'High SAINT, High Contamination',
+                                              score < 0.5 &
+                                                lit_flag + CRAPome_flag > 1 ~ 'Low SAINT, High Contamination'))
+```
+

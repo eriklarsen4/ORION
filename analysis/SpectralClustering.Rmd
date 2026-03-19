@@ -14,12 +14,7 @@ output:
     latex_engine: xelatex
   md_document:
     variant: gfm
-vignette: >
-  %\VignetteIndexEntry{Spectral Clustering vignette}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
 ---
-
 # Overview
 
 This markdown was developed to formally document an ad-hoc cluster analysis for 
@@ -41,7 +36,7 @@ knitr::opts_chunk$set(
   fig.width = 10,
   fig.height = 12,
   dev = c("png", "pdf"),
-  fig.path = "../../analysis/R/SpectralClustering/"
+  fig.path = "../analysis/R/SpectralClustering/"
 )
 ```
 
@@ -83,7 +78,7 @@ options(stringsAsFactors = FALSE)
 
 ```{r Data Load}
 # Load precomputed objects from preprocessing
-load("../../analysis/R/precompute_objects.rda")
+load("../analysis/R/precompute_objects.rda")
 ```
 
 ```{r Second Data Load, echo = FALSE}
@@ -332,12 +327,7 @@ Extract the `eigenvectors` and `eigenvalues` of each similarity graph method
 
 ## Eigendecomposition of Gaussian Normalized Laplacian
 
-```{r Extract Gaussian Eigencomponents, echo = F}
-gaussian_eigenvalues <- gaussian_eig$values
-gaussian_eigenvectors <- gaussian_eig$vectors
-```
-
-```{r Conduct Eigendecomposition on Gaussian RBF kernel similarity matrix, eval = F}
+```{r Conduct Eigendecomposition on Gaussian RBF kernel similarity matrix}
 # compute eigendecomposition of the Gaussian RBF kernel-based normalized Laplacian
 gaussian_eig <- eigen(gaussian_norm_L, symmetric = TRUE)
 
@@ -348,12 +338,7 @@ gaussian_eigenvectors <- gaussian_eig$vectors
 
 ## Eigendecomposition of kNN Normalized Laplacian
 
-```{r Extract kNN Eigencomponents, echo = F}
-kNN_eigenvalues <- kNN_eig$values
-kNN_eigenvectors <- kNN_eig$vectors
-```
-
-```{r Conduct Eigendecomposition on kNN adjacency matrix, eval = F}
+```{r Conduct Eigendecomposition on kNN adjacency matrix}
 # compute eigendecomposition of the kNN adjacency matrix-based normalized Laplacian
 kNN_eig <- eigen(kNN_norm_L, symmetric = TRUE)
 
@@ -734,7 +719,7 @@ spectral_enrichment_results_df
 ```
 
 ```{r Load Module GO GSEA, eval = TRUE, echo = FALSE}
-load("../../analysis/R/SpectralClustering/spectralCluster_GO_GSEA.rda")
+load("../analysis/R/SpectralClustering/spectralCluster_GO_GSEA.rda")
 ```
 
 **No GO Terms were enriched** in the only cluster of the spectral clustering method. 

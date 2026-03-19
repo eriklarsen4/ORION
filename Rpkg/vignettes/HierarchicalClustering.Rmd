@@ -85,6 +85,15 @@ load("../../analysis/R/precompute_objects.rda")
 
 ```{r Second Data Load, echo = FALSE}
 rm(IPMS_mat_log)
+hSAINT <- hSAINT |> 
+  dplyr::mutate(stat_class = dplyr::case_when(score > 0.5 & 
+                                                lit_flag + CRAPome_flag <= 1 ~ 'High SAINT, Low Contamination',
+                                              score < 0.5 &
+                                                lit_flag + CRAPome_flag <= 1 ~ 'Low SAINT, Low Contamination',
+                                              score > 0.5 &
+                                                lit_flag + CRAPome_flag > 1 ~ 'High SAINT, High Contamination',
+                                              score < 0.5 &
+                                                lit_flag + CRAPome_flag > 1 ~ 'Low SAINT, High Contamination'))
 ```
 
 
@@ -120,14 +129,14 @@ for (m in sizes) {
     minClusterSize = m
   )
   results[[as.character(m)]] <- cl
-  cat("minClusterSize =", m, "→", length(table(cl)), "modules\n")
+  cat("minClusterSize =", m, "→", length(table(cl)), "clusters\n")
 }
 rm(list = c('cl', 'm', 'sizes', 'results'))
 ```
 
   + `optimal minimum cluster size` is **50** (elbow; diminishing returns after)
   
-  + `# modules` = **28**
+  + `# clusters` = **28**
 
 ```{r Clusters on Raw Counts}
 clusters_opt <- dynamicTreeCut::cutreeDynamic(hc,
@@ -138,14 +147,14 @@ clusters_opt <- dynamicTreeCut::cutreeDynamic(hc,
 names(clusters_opt) <- rownames(IPMS_mat)
 ```
 
-```{r Get Modules}
-module_ids <- sort(unique(clusters_opt))
-module_colors <- stats::setNames(
-  grDevices::rainbow(length(module_ids), s = 0.6, v = 0.9),
-  module_ids
+```{r Get Clusters}
+cluster_ids <- sort(unique(clusters_opt))
+cluster_colors <- stats::setNames(
+  grDevices::rainbow(length(cluster_ids), s = 0.6, v = 0.9),
+  cluster_ids
 )
 
-annotation_colors <- list(Module = module_colors)
+annotation_colors <- list(cluster = cluster_colors)
 ```
 
 Sparse data is too difficult to discern from a global view
@@ -180,15 +189,15 @@ rm(list = c('condition', 'col_order'))
 fmt <- knitr::pandoc_to()
 
 if (identical(fmt, "html")) {
-  cat('# Module Descriptions {.tabset .tabset-pills .tabset-fade}\n')
+  cat('# Cluster Descriptions {.tabset .tabset-pills .tabset-fade}\n')
 } else if (identical(fmt, "markdown")) {
-  cat('<details><summary><strong>Module Descriptions</strong></summary>\n')
+  cat('<details><summary><strong>Cluster Descriptions</strong></summary>\n')
 } else {
-  cat('# Module Descriptions\n')
+  cat('# Cluster Descriptions\n')
 }
 ```
 In order to assess this method and also to compare/validate the hierarchical SAINT
-model, describing modules/clusters based on the proteins in them is useful
+model, describing clusters based on the proteins in them is useful
 
 Similarly localized proteins could be expected to have similar abundances to 
 each other as well as the target (**TMEM184B**)
@@ -196,35 +205,35 @@ each other as well as the target (**TMEM184B**)
 Similar functioning proteins could also be expected to have similar abundances 
 to each other as well as the target
 
-Describing these modules/clusters attained by `hierarchical clustering` via 
+Describing these clusters attained by `hierarchical clustering` via 
 gene ontology gene set enrichment analysis is, therefore, useful and standard 
 practice
 
 Furthermore, we may be able to assemble a `protein-protein interaction network`
 from the results
 
-I outline this below-- the methods and results for acquiring these modules, 
+I outline this below-- the methods and results for acquiring these clusters, 
 their constituent proteins, and how we make sense of them-- visualized as
 `dotplots`, `heatmaps`, and a `network`. I include searchable tables printed last
 
-## Extract Modules
+## Extract Clusters
 
-Extract gene names from the hierarchically-clustered modules and convert to a 
+Extract gene names from the hierarchically-clustered clusters and convert to a 
 dataframe
 
-```{r Extract Gene Names from Modules}
-modules_list_idx <- lapply(sort(unique(clusters_opt)), function(m) {
+```{r Extract Gene Names from Clusters}
+clusters_list_idx <- lapply(sort(unique(clusters_opt)), function(m) {
   which(clusters_opt == m)
 })
-names(modules_list_idx) <- sort(unique(clusters_opt))
+names(clusters_list_idx) <- sort(unique(clusters_opt))
 
-modules_list <- lapply(sort(unique(clusters_opt)), function(m) {
+clusters_list <- lapply(sort(unique(clusters_opt)), function(m) {
   rownames(IPMS_mat)[clusters_opt == m]
 })
-names(modules_list) <- sort(unique(clusters_opt)) |> as.character()
+names(clusters_list) <- sort(unique(clusters_opt)) |> as.character()
 
-modules_df <- modules_list %>%
-  purrr::map_df(., .f = as.data.frame, .id = 'module') |> 
+clusters_df <- clusters_list %>%
+  purrr::map_df(., .f = as.data.frame, .id = 'cluster') |> 
   dplyr::rename(Protein = 2) |> 
   dplyr::relocate(Protein, .before = 1)
 ```
@@ -233,17 +242,17 @@ modules_df <- modules_list %>%
 rm(list = ls(pattern = '_mat'))
 ```
 
-## Join Modules to hSAINT
+## Join Clusters to hSAINT
 
 Include score summaries (mean and median posterior probability scores, ranks, and literature or CRAPome contamination rate)
 
 ```{r Summarize SAINT Scores and Contamination Rates}
-module_scores <- modules_df |>  
+cluster_scores <- clusters_df |>  
   dplyr::inner_join(
     hSAINT
   ) |> 
   dplyr::arrange(desc(score)) |> 
-  dplyr::group_by(module) |> 
+  dplyr::group_by(cluster) |> 
   dplyr::summarize(mean_score = mean(score),
                    median_score = stats::median(score),
                    score_mass = sum(score),
@@ -259,33 +268,33 @@ module_scores <- modules_df |>
   dplyr::arrange(mean_rank)
 ```
 
-Join the module scores to the modules (per protein) dataframe and the `hSAINT` results for classification
+Join the cluster scores to the cluster (per protein) dataframe and the `hSAINT` results for classification
 
 ```{r Join the Summary dataframe to the Protein Level dataframes}
-protein_module_df <- modules_df |> 
+protein_cluster_df <- clusters_df |> 
   dplyr::inner_join(
     hSAINT
   ) |> 
   dplyr::full_join(
-    module_scores |> 
+    cluster_scores |> 
       dplyr::ungroup()
   ) |> 
   dplyr::mutate(
-    SAINT_classification = dplyr::case_when(mean_rank <= 5 ~ 'High SAINT',
-                                            mean_rank > 5 ~ 'Low SAINT'
+    cluster_SAINT_class = dplyr::case_when(mean_rank <= 5 ~ 'High SAINT',
+                                           mean_rank > 5 ~ 'Low SAINT'
                                             ),
     
-    contams_classification = dplyr::case_when(lit_flag_perc > 5 ~'High Contaminants',
-                                              TRUE ~ 'Low Contaminants')) |> 
-  dplyr::mutate(classification = paste0(SAINT_classification,
+    cluster_contams_class = dplyr::case_when(lit_flag_perc > 5 ~'High Contaminants',
+                                             TRUE ~ 'Low Contaminants')) |> 
+  dplyr::mutate(cluster_class = paste0(cluster_SAINT_class,
                                         ", ",
-                                        contams_classification)) |> 
-  dplyr::select(-SAINT_classification,
-                -contams_classification) |> 
-  dplyr::relocate(classification, .after = module)
+                                        cluster_contams_class)) |> 
+  dplyr::select(-cluster_SAINT_class,
+                -cluster_contams_class) |> 
+  dplyr::relocate(cluster_class, .after = cluster)
 ```
 
-## Module GO GSEA
+## Cluster GO GSEA
 
 ```{r Downstream Analysis}
 EntrezIDs <- AnnotationDbi::select(
@@ -354,36 +363,36 @@ Run the functions on the dataset in parallel (multiple CPUs)
 future::plan(future::multisession, workers = 6)
 progressr::handlers(progressr::handler_txtprogressbar())
 
-module_ids <- sort(unique(modules_df$module))
+cluster_ids <- sort(unique(clusters_df$cluster))
 
 progressr::with_progress({
-  p <- progressr::progressor(steps = length(module_ids))
+  p <- progressr::progressor(steps = length(cluster_ids))
 
   enrichment_results <- future.apply::future_lapply(
-    module_ids,
+    cluster_ids,
     function(mod) {
 
       # tick the progress bar
-      p(sprintf("Module %s", mod))
+      p(sprintf("cluster %s", mod))
 
-      genes <- modules_df |>
-        dplyr::filter(module == mod) |>
+      genes <- clusters_df |>
+        dplyr::filter(cluster == mod) |>
         dplyr::inner_join(EntrezIDs |> dplyr::rename(Protein = 1)) |> 
         dplyr::distinct(ENTREZID) |>
         dplyr::pull(ENTREZID)
 
       list(
-        module = mod,
-        go_bp  = get_GO(genes, ontology = "BP", universe = background_genes),
-        go_cc  = get_GO(genes, ontology = "CC", universe = background_genes),
-        go_mf  = get_GO(genes, ontology = "MF", universe = background_genes)
+        cluster = mod,
+        go_bp  = get_GO(genes, ontology = "BP", background_genes = background_genes),
+        go_cc  = get_GO(genes, ontology = "CC", background_genes = background_genes),
+        go_mf  = get_GO(genes, ontology = "MF", background_genes = background_genes)
         # add KEGG/Reactome later
       )
     }
   )
 })
 
-names(enrichment_results) <- module_ids
+names(enrichment_results) <- cluster_ids
 rm(p)
 ```
 
@@ -393,8 +402,8 @@ Gather enrichment results
 global_enrichment_results_df <- lapply(enrichment_results, function(x) {
   x %>%
     purrr::map_df(., .f = as.data.frame, .id = 'GO_Category') |> 
-    dplyr::rename(module = 2, GO_Term = Description, GO_ID = ID) |> 
-    tidyr::fill(module, .direction = 'down') |> 
+    dplyr::rename(cluster = 2, GO_Term = Description, GO_ID = ID) |> 
+    tidyr::fill(cluster, .direction = 'down') |> 
     dplyr::filter(!is.na(GO_ID)) |> 
     dplyr::mutate(GO_Category = gsub(GO_Category,
                                      pattern = 'go_',
@@ -408,51 +417,51 @@ global_enrichment_results_df <- lapply(enrichment_results, function(x) {
 ```
 
 ```{r Load Module GO GSEA, eval = TRUE, echo = FALSE}
-load("../../analysis/R/HierarchicalCluster_GO_GSEA.rda")
+load("../../analysis/R/hClust/HierarchicalCluster_GO_GSEA.rda")
 global_enrichment_results_df <- HierarchicalCluster_GO_GSEA
 rm(HierarchicalCluster_GO_GSEA)
 ```
 
-The "`High SAINT score`" modules were among the modules with significant 
+The "`High SAINT score`" clusters were among the clusters with significant 
 enrichment of all the proteins detected in the experiments
 
-However, many modules did not have significant enrichment relative to the entire
+However, many clusters did not have significant enrichment relative to the entire
 set of proteins in the experiments, *including TMEM's*. Using `hierarchical SAINT score` 
-as a explanatory tool, this is likely because the modules without GO enrichment 
+as a explanatory tool, this is likely because the clusters without GO enrichment 
 contained a large mix of proteins scored as "noise" (low posterior probability 
 of being a true interactor) and signal (high posterior probability of being a 
 true interactor)
 
-In order to better make sense of the clustering-- describing the **"un-enriched" modules**-- 
-"sub-module" GO GSEA was conducted
+In order to better make sense of the clustering-- describing the **"un-enriched" clusters**-- 
+"sub-cluster" GO GSEA was conducted
 
-## SubModule GO GSEA
+## SubCluster GO GSEA
 
-Sub-module enrichment analysis on modules without any enrichment (to describe
-themes of proteins within these modules)
+Sub-cluster enrichment analysis on clusters without any enrichment (to describe
+themes of proteins within these clusters)
 
-```{r SubModule index}
+```{r SubCluster index}
 "%notin%" <- Negate("%in%")
 
-# index the modules without significant enrichment to describe sub-modules
-tier2_modules <- c(seq(1:28) |> as.character())[
+# index the clusters without significant enrichment to describe sub-clusters
+tier2_clusters <- c(seq(1:28) |> as.character())[
   which(c(seq(1:28) |> as.character()) %notin% c(global_enrichment_results_df |> 
-          dplyr::distinct(module) |> 
+          dplyr::distinct(cluster) |> 
           dplyr::pull()) == T)] 
 ```
 
-```{r SubModule function}
-# function to gather sub-modules for each module that did not return enrichment results
-submodules_from_hclust <- function(
+```{r SubCluster function}
+# function to gather sub-clusters for each cluster that did not return enrichment results
+subclusters_from_hclust <- function(
   hc_object,
-  modules_df,
-  n_sub_per_module = 3L
+  clusters_df,
+  n_sub_per_cluster = 3L
 ) {
-  # number of existing modules
-  n_modules <- length(unique(modules_df$module))
+  # number of existing clusters
+  n_clusters <- length(unique(modules_df$cluster))
 
   # total number of clusters in the finer cut
-  K_big <- n_modules * n_sub_per_module
+  K_big <- n_clusters * n_sub_per_cluster
 
   # finer cut of the same tree
   sub_labels_all <- stats::cutree(hc_object, k = K_big)
@@ -463,47 +472,47 @@ submodules_from_hclust <- function(
     sub_label = sub_labels_all
   )
 
-  # attach existing module labels
+  # attach existing cluster labels
   sub_df <- dplyr::inner_join(
     sub_df,
-    modules_df,
+    clusters_df,
     by = "Protein"
   )
 
-  # define submodules as (module, sub_label) pairs
-  submodules_df <- sub_df %>%
-    dplyr::group_by(module, sub_label) %>%
+  # define subclusters as (cluster, sub_label) pairs
+  subclusters_df <- sub_df %>%
+    dplyr::group_by(cluster, sub_label) %>%
     dplyr::mutate(
-      submodule = paste0("sub", dplyr::cur_group_id())
+      subcluster = paste0("sub", dplyr::cur_group_id())
     ) %>%
     dplyr::ungroup() %>%
-    dplyr::select(Protein, module, submodule)
+    dplyr::select(Protein, cluster, subcluster)
 
-  return(submodules_df)
+  return(subclusters_df)
 }
 ```
 
-```{r SubModule application}
-# get the sub-modules
-submodules_df <- submodules_from_hclust(
+```{r SubCluster application}
+# get the sub-clusters
+subclusters_df <- subclusters_from_hclust(
   hc_object  = hc,
-  modules_df = dplyr::filter(modules_df, module %in% tier2_modules),
-  n_sub_per_module = 3L
+  clusters_df = dplyr::filter(clusters_df, cluster %in% tier2_clusters),
+  n_sub_per_cluster = 3L
 )
 ```
 
-```{r Show GSEA on SubModules, eval= FALSE, echo = TRUE}
-# perform GO GSEA on the submodules
+```{r Show GSEA on SubClusters, eval= FALSE, echo = TRUE}
+# perform GO GSEA on the subclusters
 
-submodule_enrichment_results <- submodules_df %>%
+subcluster_enrichment_results <- subclusters_df %>%
   dplyr::inner_join(EntrezIDs |> dplyr::rename(Protein = 1)) |> 
-  dplyr::group_by(module, submodule) %>%
+  dplyr::group_by(cluster, subcluster) %>%
   dplyr::group_modify(~ {
 
-    # submodule genes
+    # subcluster genes
     genes <- .x$ENTREZID
     
-    background_genes <- unique(submodules_df$ENTREZID[submodules_df$module == .y$module])
+    background_genes <- unique(subclusters_df$ENTREZID[subclusters_df$cluster == .y$cluster])
 
     tibble::tibble(
       BP = list(get_GO(genes, ontology = "BP", background_genes = background_genes)),
@@ -515,9 +524,9 @@ submodule_enrichment_results <- submodules_df %>%
 rm(background_genes)
 ```
 
-```{r Gather SubModule GSEA data, eval = FALSE, echo = TRUE}
-# wrangle the sub-module GO GSEA results
-submodule_enrichment_results_df <- submodule_enrichment_results |> 
+```{r Gather SubCluster GSEA data, eval = FALSE, echo = TRUE}
+# wrangle the sub-cluster GO GSEA results
+subcluster_enrichment_results_df <- subcluster_enrichment_results |> 
     tidyr::pivot_longer(
       cols      = c('BP', 'CC', 'MF'),
       names_to  = "GO_Category",
@@ -532,8 +541,8 @@ submodule_enrichment_results_df <- submodule_enrichment_results |>
       GO_Term = Description
     ) |>
     dplyr::select(
-      module,
-      submodule,
+      cluster,
+      subcluster,
       GO_Category,
       GO_Term,
       GO_ID,
@@ -542,37 +551,37 @@ submodule_enrichment_results_df <- submodule_enrichment_results |>
     )
 ```
 
-```{r Load SubModule GO GSEA, eval = TRUE, echo = FALSE}
-load("../../analysis/R/HierarchicalSubModCluster_GO_GSEA.rda")
+```{r Load SubCluster GO GSEA, eval = TRUE, echo = FALSE}
+load("../../analysis/R/hClust/HierarchicalSubModCluster_GO_GSEA.rda")
 ```
 
-```{r Find UnEnriched SubModules}
-modules_with_submodule_enrichment <- tier2_modules
-modules_without_submodule_enrichment <- generics::setdiff(modules_with_submodule_enrichment,
-                                                          submodule_enrichment_results_df |> 
-                                                            dplyr::distinct(module) |> 
+```{r Find UnEnriched SubClusters}
+clusters_with_subcluster_enrichment <- tier2_clusters
+clusters_without_subcluster_enrichment <- generics::setdiff(clusters_with_subcluster_enrichment,
+                                                          subcluster_enrichment_results_df |> 
+                                                            dplyr::distinct(cluster) |> 
                                                             dplyr::pull())
-modules_with_submodule_enrichment <- submodule_enrichment_results_df |> 
-  dplyr::distinct(module) |> 
+clusters_with_subcluster_enrichment <- subcluster_enrichment_results_df |> 
+  dplyr::distinct(cluster) |> 
   dplyr::pull()
-rm(tier2_modules)
+rm(tier2_clusters)
 ```
 
-## Construct the Module GO (similarity) Network
+## Construct the Cluster GO (similarity) Network
 
 ```{r Construct GO Network Object}
 go_network <- global_enrichment_results_df |> 
-  dplyr::full_join(submodule_enrichment_results_df) |> 
-  dplyr::full_join(module_scores) |> 
-  dplyr::mutate(Tier = dplyr::case_when(is.na(submodule) ~ 'Tier1',TRUE~'Tier2'),
+  dplyr::full_join(subcluster_enrichment_results_df) |> 
+  dplyr::full_join(cluster_scores) |> 
+  dplyr::mutate(Tier = dplyr::case_when(is.na(subcluster) ~ 'Tier1',TRUE~'Tier2'),
                 node_to = GO_Term,
                 node_from = paste0(
                   
-                  "Module", module,
-                  ifelse(is.na(submodule),
+                  "cluster", cluster,
+                  ifelse(is.na(subcluster),
                          '',
-                         paste0('_SubModule',
-                                submodule %>% 
+                         paste0('_Subcluster',
+                                subcluster %>% 
                                   stringr::str_extract(., pattern = '\\d+')))),
                 weight = -log10(p.adjust)) |> 
   dplyr::filter(weight > -log10(0.05))
@@ -583,10 +592,10 @@ g <- igraph::graph_from_data_frame(
   directed = TRUE,
   vertices =
     dplyr::bind_rows(
-      go_network |> dplyr::transmute(name = node_from, score_mass, submodule),
+      go_network |> dplyr::transmute(name = node_from, score_mass, subcluster),
       go_network |> dplyr::transmute(name = node_to,
                                      score_mass = NA_real_,
-                                     submodule = NA_character_)
+                                     subcluster = NA_character_)
     ) |>
     dplyr::distinct(name, .keep_all = TRUE)
 )
@@ -604,25 +613,25 @@ if (identical(fmt, "html")) {
 }
 ```
 
-## Module Dot Plot
+## Cluster Dot Plot
 
-```{r RawModuleSubModuleDotPlotOfGOTerms, warning = F, message = F, fig.height=14}
+```{r RawClusterSubClusterDotPlotOfGOTerms, warning = F, message = F, fig.height=14}
 global_enrichment_results_df |> 
-  dplyr::full_join(submodule_enrichment_results_df) |> 
-  dplyr::full_join(module_scores) |> 
+  dplyr::full_join(subcluster_enrichment_results_df) |> 
+  dplyr::full_join(cluster_scores) |> 
   dplyr::filter(!is.na(GO_Term)) |> 
   dplyr::filter(!is.na(GO_Category)) |> 
   dplyr::mutate(
     Tier = dplyr::case_when(
-      is.na(submodule) ~ paste0('Mod. ', module),
-      TRUE ~ paste0('Mod. ', module,
+      is.na(subcluster) ~ paste0('Mod. ', cluster),
+      TRUE ~ paste0('Mod. ', cluster,
                     ':\nsubmod. ',
-                    gsub(submodule, pattern = 'sub', replacement = ''))
+                    gsub(subcluster, pattern = 'sub', replacement = ''))
       ),
-    is_enriched = dplyr::case_when(is.na(submodule) ~ 'Enriched',
+    is_enriched = dplyr::case_when(is.na(subcluster) ~ 'Enriched',
                                    TRUE ~ 'Not Enriched')
     ) |> 
-  dplyr::group_by(module) |>  
+  dplyr::group_by(cluster) |>  
   dplyr::slice_head(n = 3) |>
   dplyr::arrange(p.adjust) |>
   ggplot2::ggplot(
@@ -642,13 +651,13 @@ global_enrichment_results_df |>
                       alpha = 0.5) +
   ggplot2::geom_point() +
   ggplot2::facet_grid(Tier ~ ., scales = 'free_y') +
-  ggplot2::labs(title = 'GO Enrichment Across\nModules and SubModules\nin TMEM184B IPMS\nHierarchical Clustering',
+  ggplot2::labs(title = 'GO Enrichment Across\nClusters and SubClusters\nin TMEM184B IPMS\nHierarchical Clustering',
                 x = '-log10(Adj.P-val)',
                 y = 'GO Term',
-                alpha = 'Module\nMean\nHierarchical\nSAINT\nScore',
+                alpha = 'Cluster\nMean\nHierarchical\nSAINT\nScore',
                 size = 'FoldEnrichment',
                 color = 'GO Category',
-                shape = 'IsEnrichedModule') +
+                shape = 'IsEnrichedcluster') +
   ggplot2::theme_bw() +
   ggplot2::theme(title = ggplot2::element_text(face = 'bold', size = 12),
                  axis.text = ggplot2::element_text(face = 'bold', size = 10),
@@ -671,9 +680,9 @@ global_enrichment_results_df |>
                                         'firebrick'))
 ```
 
-## Module GO (similarity) Network
+## Cluster GO (similarity) Network
 
-```{r ModuleGOTermSimilarityNetwork, warning = F, message = F}
+```{r ClusterGOTermSimilarityNetwork, warning = F, message = F}
 coords <- igraph::layout_with_fr(g)
 coords <- coords*200
 
@@ -789,21 +798,22 @@ visNetwork::visNetwork(
 rm(coords)
 ```
 
-Modules with `enriched` GO Terms are `blue`
+Clusters with `enriched` GO Terms are `blue`
 
-Here, only the enriched sub-modules were included:
-the modules with that did not reach significant enrichment broadly, but did 
-reach significant enrichment when that module was broken up. These `Enriched` 
-**sub-modules** are **non-blue**
+Here, only the enriched sub-clusters were included:
+the clusters with that did not reach significant enrichment broadly, but did 
+reach significant enrichment when that cluster was broken up. These `Enriched` 
+**sub-clusters** are **non-blue**
 
-Modules **2**, **9**, **15**, and **26** are of interest, having terms in line
+Clusters **2**, **9**, **15**, and **26** are of interest, having terms in line
 with what might be expected from a `TMEM` experiment, and having robust
-`Hierarchical SAINT` scores (hover over Module/SubModule nodes)
+`Hierarchical SAINT` scores (hover over cluster/SubCluster nodes)
 
-`TMEM184B`, itself, was in Module **12**, which did *NOT* return any enriched GO
+`TMEM184B`, itself, was in cluster **12**, which did *NOT* return any enriched GO
 Terms, likely due to its membrane protein nature (and putative localization, 
 where it may progress through the endomembrane system and collide with a wide
-variety of proteins). This is common among TM protein IPMS
+variety of proteins), "sticking" to any number of non-specific proteinss. This 
+is common among TM protein IPMS
 
 ```{r, results='asis', echo=FALSE}
 fmt <- knitr::pandoc_to()
@@ -837,24 +847,24 @@ pheatmap::pheatmap(
 )
 ```
 
-### Raw Counts Heatmap (TMEM Module)
+### Raw Counts Heatmap (TMEM Cluster)
 
-```{r RawZHeatmapTMEMModule, render = T}
+```{r RawZHeatmapTMEMCluster, render = T}
 pheatmap::pheatmap(
   IPMS_z_ordered[rownames(IPMS_z_ordered) %in% 
                    
-                   c(protein_module_df |> 
+                   c(protein_cluster_df |> 
                        dplyr::full_join(global_enrichment_results_df) |> 
-                       dplyr::full_join(submodule_enrichment_results_df) |> 
+                       dplyr::full_join(subcluster_enrichment_results_df) |> 
                        dplyr::select(-c(GO_Category:Count)) |> 
                        dplyr::distinct() |> 
                        dplyr::filter(
-                         module == protein_module_df |> 
+                         cluster == protein_cluster_df |> 
                            dplyr::full_join(global_enrichment_results_df) |> 
-                           dplyr::full_join(submodule_enrichment_results_df) |> 
+                           dplyr::full_join(subcluster_enrichment_results_df) |> 
                            dplyr::select(-c(GO_Category:Count)) |> 
                            dplyr::filter(Protein == 'TMEM184B') |> 
-                           dplyr::pull(module)
+                           dplyr::pull(cluster)
                          ) |> 
                        dplyr::pull(Protein)
                      ),
@@ -868,44 +878,44 @@ pheatmap::pheatmap(
   fontsize_row = 5,
   annotation_row = data.frame(
     
-    Module12_SubModule = clusters_opt[
+    cluster12_Subcluster = clusters_opt[
       names(clusters_opt) %in% 
         
-        c(protein_module_df |> 
+        c(protein_cluster_df |> 
                        dplyr::full_join(global_enrichment_results_df) |> 
-                       dplyr::full_join(submodule_enrichment_results_df) |> 
+                       dplyr::full_join(subcluster_enrichment_results_df) |> 
                        dplyr::select(-c(GO_Category:Count)) |> 
                        dplyr::distinct() |> 
                        dplyr::filter(
-                         module == protein_module_df |> 
+                         cluster == protein_cluster_df |> 
                            dplyr::full_join(global_enrichment_results_df) |> 
-                           dplyr::full_join(submodule_enrichment_results_df) |> 
+                           dplyr::full_join(subcluster_enrichment_results_df) |> 
                            dplyr::select(-c(GO_Category:Count)) |> 
                            dplyr::filter(Protein == 'TMEM184B') |> 
-                           dplyr::pull(module)
+                           dplyr::pull(cluster)
                          ) |> dplyr::filter(!is.na(Protein)) |> 
             dplyr::pull(Protein)
                      )
       ]
     ),
-  annotation_colors = list(Module12_SubModule = 'darkorange2'),
+  annotation_colors = list(cluster12_Subcluster = 'darkorange2'),
   angle_col = 90,
   use_raster = F,
   border_color = NA,
-  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, TMEM Module'
+  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, TMEM Cluster'
 )
 ```
 
-`TMEM`'s module (**12**) is not siginficantly enriched above the proteins detected by
+`TMEM`'s cluster (**12**) is not siginficantly enriched above the proteins detected by
 the mass spectrometer.
 
-Submodules within **module 12** are not enriched 
+Subclusters within **cluster 12** are not enriched 
 
-### High hSAINT Score, Low Contamination Module Heatmap (Signal)
+### High hSAINT Score, Low Contamination Cluster Heatmap (Signal)
 
-```{r RawZHeatmapSAINTSignalModule, render = T}
+```{r RawZHeatmapSAINTSignalCluster, render = T}
 pheatmap::pheatmap(
-  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_module_df |> 
+  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
                    dplyr::filter(Protein == 'TMEM184B' |
                                    grepl(classification,
                                          pattern = 'High SAINT, Low')) |> 
@@ -918,10 +928,10 @@ pheatmap::pheatmap(
   show_rownames = F,
   annotation_row = data.frame(
     
-    Module = clusters_opt[
+    cluster = clusters_opt[
       names(clusters_opt) %in% 
         
-        c(protein_module_df |> 
+        c(protein_cluster_df |> 
             dplyr::filter(Protein == 'TMEM184B' |
                             grepl(classification,
                                   pattern = 'High SAINT, Low')) |> 
@@ -930,7 +940,7 @@ pheatmap::pheatmap(
       ]
     ),
   
-  annotation_colors = list(Module = c('firebrick', 'navy')),
+  annotation_colors = list(cluster = c('firebrick', 'navy')),
   angle_col = 90,
   use_raster = F,
   border_color = NA,
@@ -939,11 +949,11 @@ pheatmap::pheatmap(
 )
 ```
 
-### High hSAINT Score, High Contamination Modules Heatmap (Sticky/Noise)
+### High hSAINT Score, High Contamination Clusters Heatmap (Sticky/Noise)
 
-```{r RawZHeatmapSAINTHighHighModules, render = T}
+```{r RawZHeatmapSAINTHighHighClusters, render = T}
 pheatmap::pheatmap(
-  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_module_df |> 
+  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
                    dplyr::filter(Protein == 'TMEM184B' |
                                    grepl(classification,
                                          pattern = 'High SAINT, High')) |> 
@@ -956,10 +966,10 @@ pheatmap::pheatmap(
   show_rownames = F,
   annotation_row = data.frame(
     
-    Module = clusters_opt[
+    cluster = clusters_opt[
       names(clusters_opt) %in% 
         
-        c(protein_module_df |> 
+        c(protein_cluster_df |> 
             dplyr::filter(Protein == 'TMEM184B' |
                             grepl(classification,
                                   pattern = 'High SAINT, High')) |> 
@@ -968,7 +978,7 @@ pheatmap::pheatmap(
       ]
     ),
   
-  annotation_colors = list(Module = c('darkorange',
+  annotation_colors = list(cluster = c('darkorange',
                                       'darkviolet',
                                       'lightpink',
                                       'skyblue')),
@@ -980,11 +990,11 @@ pheatmap::pheatmap(
 )
 ```
 
-### Low hSAINT Score, Low Contamination Modules Heatmap (Low Abundance)
+### Low hSAINT Score, Low Contamination Clusters Heatmap (Low Abundance)
 
-```{r RawZHeatmapSAINTLowLowModules, render = T}
+```{r RawZHeatmapSAINTLowLowClusters, render = T}
 pheatmap::pheatmap(
-  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_module_df |> 
+  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
                    dplyr::filter(Protein == 'TMEM184B' |
                                    grepl(classification,
                                          pattern = 'Low SAINT, Low')) |> 
@@ -997,10 +1007,10 @@ pheatmap::pheatmap(
   show_rownames = F,
   annotation_row = data.frame(
     
-    Module = clusters_opt[
+    cluster = clusters_opt[
       names(clusters_opt) %in% 
         
-        c(protein_module_df |> 
+        c(protein_cluster_df |> 
             dplyr::filter(Protein == 'TMEM184B' |
                             grepl(classification,
                                   pattern = 'Low SAINT, Low')) |> 
@@ -1009,9 +1019,9 @@ pheatmap::pheatmap(
       ]
     ),
   
-  annotation_colors = list(Module = annotation_colors[[1]][
+  annotation_colors = list(cluster = annotation_colors[[1]][
     clusters_opt[
-      names(clusters_opt) %in% c(protein_module_df |> 
+      names(clusters_opt) %in% c(protein_cluster_df |> 
                    dplyr::filter(Protein == 'TMEM184B' |
                                    grepl(classification,
                                          pattern = 'Low SAINT, Low')) |> 
@@ -1025,11 +1035,11 @@ pheatmap::pheatmap(
 )
 ```
 
-### Low hSAINT Score, High Contamination Modules Heatmap (Background)
+### Low hSAINT Score, High Contamination Clusters Heatmap (Background)
 
-```{r RawZHeatmapSAINTContamModules, render = T}
+```{r RawZHeatmapSAINTContamClusters, render = T}
 pheatmap::pheatmap(
-  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_module_df |> 
+  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
                    dplyr::filter(Protein == 'TMEM184B' |
                                    grepl(classification,
                                          pattern = 'Low SAINT, High')) |> 
@@ -1042,10 +1052,10 @@ pheatmap::pheatmap(
   show_rownames = F,
   annotation_row = data.frame(
     
-    Module = clusters_opt[
+    cluster = clusters_opt[
       names(clusters_opt) %in% 
         
-        c(protein_module_df |> 
+        c(protein_cluster_df |> 
             dplyr::filter(Protein == 'TMEM184B' |
                             grepl(classification,
                                   pattern = 'Low SAINT, High')) |> 
@@ -1054,9 +1064,9 @@ pheatmap::pheatmap(
       ]
     ),
   
-  annotation_colors = list(Module = annotation_colors[[1]][
+  annotation_colors = list(cluster = annotation_colors[[1]][
     clusters_opt[
-      names(clusters_opt) %in% c(protein_module_df |> 
+      names(clusters_opt) %in% c(protein_cluster_df |> 
                    dplyr::filter(Protein == 'TMEM184B' |
                                    grepl(classification,
                                          pattern = 'Low SAINT, High')) |> 
@@ -1086,22 +1096,22 @@ if (identical(fmt, "html")) {
 options(htmlwidgets.shinyMode = TRUE)
 ```
 
-## Clustering Results Table by Protein (Modules 9, 12)
+## Clustering Results Table by Protein (Clusters 9, 12)
 
 ```{r Print Protein Level Results Table}
 DT::datatable(
-  protein_module_df |> 
+  protein_cluster_df |> 
     dplyr::full_join(global_enrichment_results_df) |> 
-    dplyr::full_join(submodule_enrichment_results_df) |> 
+    dplyr::full_join(subcluster_enrichment_results_df) |> 
     dplyr::rename(hSAINT_score = score) |> 
-    dplyr::rename(module_size = n) %>%
+    dplyr::rename(cluster_size = n) %>%
     dplyr::rename_with(.cols = c(dplyr::contains("mean_"),
                                  dplyr::contains("median_"),
                                  dplyr::contains("_perc"),
-                                 score_mass), ~paste0("module_", .x)) |> 
+                                 score_mass), ~paste0("cluster_", .x)) |> 
     dplyr::filter(!is.na(GO_Term)) |> 
     dplyr::filter(!is.na(GO_Category)) |> 
-    dplyr::filter( (grepl(module,
+    dplyr::filter( (grepl(cluster,
                           pattern = '12') &
                       hSAINT_score > 0.5) |
                      (grepl(classification,
@@ -1113,24 +1123,24 @@ DT::datatable(
 
 This (complete) table exists as [hClust_protein_level_GO_GSEA.rda](../../analysis/R/hClust/hClust_protein_level_GO_GSEA.rda) in [Endo/analysis/R/hClust/](../../analysis/R/hClust)
 
-## Clustering Results Table by Module
+## Clustering Results Table by Cluster
 
-```{r Print Module Level Results Table}
+```{r Print Cluster Level Results Table}
 DT::datatable(
   global_enrichment_results_df |> 
-  dplyr::full_join(submodule_enrichment_results_df) |> 
-  dplyr::full_join(module_scores) |> 
-  dplyr::rename(module_size = n) %>%
+  dplyr::full_join(subcluster_enrichment_results_df) |> 
+  dplyr::full_join(cluster_scores) |> 
+  dplyr::rename(cluster_size = n) %>%
   dplyr::rename_with(.cols = c(dplyr::contains("mean_"),
                                  dplyr::contains("median_"),
                                  dplyr::contains("_perc"),
-                                 score_mass), ~paste0("module_", .x)) |> 
+                                 score_mass), ~paste0("cluster_", .x)) |> 
   dplyr::filter(!is.na(GO_Term)) |> 
   dplyr::filter(!is.na(GO_Category))
 )
 ```
 
-This table exists as [hClust_module_level_GO_GSEA.rda](../../analysis/R/hClust/hClust_module_level_GO_GSEA.rda) in [Endo/analysis/R/hClust/](../../analysis/R/hClust)
+This table exists as [hClust_cluster_level_GO_GSEA.rda](../../analysis/R/hClust/hClust_cluster_level_GO_GSEA.rda) in [Endo/analysis/R/hClust/](../../analysis/R/hClust)
 
 ```{r, results='asis', echo=FALSE}
 fmt <- knitr::pandoc_to()
@@ -1144,15 +1154,15 @@ if (identical(fmt, "html")) {
 }
 ```
 
-**Module 9** has the highest volume of `hSAINT` signal across modules, with some 
+**Cluster 9** has the highest volume of `hSAINT` signal across clusters, with some 
 interesting potential candidates
 
-As noted above, it is not surprising **Module 12**, `TMEM`'s module, was not 
+As noted above, it is not surprising **Cluster 12**, `TMEM`'s cluster, was not 
 enriched, containing a large amount of proteins with low `hSAINT` scores, likely due
 to `TMEM`'s nature as a transmembrane protein, exacerbated by its localization to 
 multiple organellar compartments
 
-A more in-depth analysis of proteins across modules where there is greater 
+A more in-depth analysis of proteins across clusters where there is greater 
 probability of interacting with `TMEM` is encouraged-- collecting groups of proteins,
 related by localization or function, is useful for inferring data validity; 
 however, data coherence **should not negate** investigating proteins with high `hSAINT`
