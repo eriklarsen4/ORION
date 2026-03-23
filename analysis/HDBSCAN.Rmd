@@ -1,5 +1,5 @@
 ---
-title: "HDBSCAN vignette"
+title: "HDBSCAN"
 author: "Erik Larsen"
 date: "`r Sys.Date()`"
 always_allow_html: true
@@ -14,10 +14,6 @@ output:
     latex_engine: xelatex
   md_document:
     variant: gfm
-vignette: >
-  %\VignetteIndexEntry{HDBSCAN vignette}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
 ---
 
 # Overview
@@ -39,7 +35,7 @@ knitr::opts_chunk$set(
   fig.width = 10,
   fig.height = 12,
   dev = c("png", "pdf"),
-  fig.path = "../../analysis/R/SpectralClustering/"
+  fig.path = "R/SpectralClustering/"
 )
 ```
 
@@ -81,7 +77,7 @@ Classify each protein into a quadrant based on its `hSAINT` score ( **> 0.5** = 
 
 ```{r Data Load}
 # Load precomputed objects from preprocessing
-load("../../analysis/R/precompute_objects.rda")
+load("R/precompute_objects.rda")
 ```
 
 ```{r Second precompute Data Load, echo = FALSE}
@@ -499,7 +495,7 @@ global_enrichment_results_df |>
 ```
 
 ```{r Load Cluster GO GSEA, eval = TRUE, echo = FALSE}
-load("../../analysis/R/HDBSCAN/HDBSCANCluster_GO_GSEA.rda")
+load("R/HDBSCAN/HDBSCANCluster_GO_GSEA.rda")
 global_enrichment_results_df <- HDBSCANCluster_GO_GSEA
 rm(HDBSCANCluster_GO_GSEA)
 
@@ -764,7 +760,7 @@ subcluster_enrichment_results_df |>
 ```
 
 ```{r Load SubCluster GO_GSEA data, echo = F}
-load("../../analysis/R/HDBSCAN/HDBSCANSubClustCluster_GO_GSEA.rda")
+load("R/HDBSCAN/HDBSCANSubClustCluster_GO_GSEA.rda")
 subcluster_enrichment_results_df <- HDBSCANSubClustCluster_GO_GSEA
 rm(HDBSCANSubClustCluster_GO_GSEA)
 subcluster_enrichment_results_df |> head()

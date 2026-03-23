@@ -41,7 +41,7 @@ knitr::opts_chunk$set(
   fig.width = 10,
   fig.height = 12,
   dev = c("png", "pdf"),
-  fig.path = "../../analysis/R/hClust/"
+  fig.path = "R/hClust/"
 )
 ```
 
@@ -80,20 +80,22 @@ options(stringsAsFactors = FALSE)
 
 ```{r Data Load}
 # Load precomputed objects from preprocessing
-load("../../analysis/R/precompute_objects.rda")
+load("R/precompute_objects.rda")
 ```
 
 ```{r Second Data Load, echo = FALSE}
 rm(IPMS_mat_log)
 hSAINT <- hSAINT |> 
-  dplyr::mutate(stat_class = dplyr::case_when(score > 0.5 & 
-                                                lit_flag + CRAPome_flag <= 1 ~ 'High SAINT, Low Contamination',
-                                              score < 0.5 &
-                                                lit_flag + CRAPome_flag <= 1 ~ 'Low SAINT, Low Contamination',
-                                              score > 0.5 &
-                                                lit_flag + CRAPome_flag > 1 ~ 'High SAINT, High Contamination',
-                                              score < 0.5 &
-                                                lit_flag + CRAPome_flag > 1 ~ 'Low SAINT, High Contamination'))
+  dplyr::rename(hSAINT_score = score) |> 
+  dplyr::mutate(contam_flag = lit_flag + CRAPome_flag, .before = lit_flag) |> 
+  dplyr::mutate(protein_stat_class = dplyr::case_when(hSAINT_score > 0.5 & 
+                                                contam_flag < 1 ~ 'High hSAINT, Low Contamination',
+                                              hSAINT_score < 0.5 &
+                                                contam_flag < 1 ~ 'Low hSAINT, Low Contamination',
+                                              hSAINT_score > 0.5 &
+                                                contam_flag > 0 ~ 'High hSAINT, High Contamination',
+                                              hSAINT_score < 0.5 &
+                                                contam_flag > 0 ~ 'Low hSAINT, High Contamination'))
 ```
 
 
@@ -251,19 +253,19 @@ cluster_scores <- clusters_df |>
   dplyr::inner_join(
     hSAINT
   ) |> 
-  dplyr::arrange(desc(score)) |> 
+  dplyr::arrange(desc(hSAINT_score)) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::summarize(mean_score = mean(score),
-                   median_score = stats::median(score),
-                   score_mass = sum(score),
+  dplyr::summarize(mean_hSAINT_score = mean(hSAINT_score),
+                   median_hSAINT_score = stats::median(hSAINT_score),
+                   hSAINT_score_mass = sum(hSAINT_score),
                    n = dplyr::n(),
                    lit_flag_perc = (sum(lit_flag)/n)*100,
                    CRAPome_flag_perc = (sum(CRAPome_flag)/n)*100) |> 
-  dplyr::arrange(desc(mean_score)) |> 
+  dplyr::arrange(desc(mean_hSAINT_score)) |> 
   dplyr::mutate(mean_rank = dplyr::row_number()) |> 
-  dplyr::arrange(desc(median_score)) |> 
+  dplyr::arrange(desc(median_hSAINT_score)) |> 
   dplyr::mutate(median_rank = dplyr::row_number()) |> 
-  dplyr::arrange(desc(score_mass)) |> 
+  dplyr::arrange(desc(hSAINT_score_mass)) |> 
   dplyr::mutate(total_rank = dplyr::row_number()) |> 
   dplyr::arrange(mean_rank)
 ```
@@ -279,19 +281,35 @@ protein_cluster_df <- clusters_df |>
     cluster_scores |> 
       dplyr::ungroup()
   ) |> 
+  dplyr::rename_with(.cols = c(mean_hSAINT_score:CRAPome_flag_perc), ~paste0("cluster_", .x)) |> 
+  dplyr::rename_with(.cols = c(hSAINT_score:stat_class), ~paste0("protein_", .x)) |> 
+  dplyr::mutate(contam_flag = protein_lit_flag + protein_CRAPome_flag, .after = protein_hSAINT_score) %>%
+  dplyr::mutate(dplyr::across(c(dplyr::where(is.double)), ~ round(.x, 3))) |> 
   dplyr::mutate(
-    cluster_SAINT_class = dplyr::case_when(mean_rank <= 5 ~ 'High SAINT',
-                                           mean_rank > 5 ~ 'Low SAINT'
-                                            ),
-    
-    cluster_contams_class = dplyr::case_when(lit_flag_perc > 5 ~'High Contaminants',
-                                             TRUE ~ 'Low Contaminants')) |> 
-  dplyr::mutate(cluster_class = paste0(cluster_SAINT_class,
-                                        ", ",
-                                        cluster_contams_class)) |> 
-  dplyr::select(-cluster_SAINT_class,
-                -cluster_contams_class) |> 
-  dplyr::relocate(cluster_class, .after = cluster)
+    cluster_class = dplyr::case_when(
+      cluster_median_hSAINT_score > 0.5 &
+        cluster_contam_perc > 
+        cluster_scores |> 
+        dplyr::pull(contam_perc) |> 
+        stats::median() ~ 'High hSAINT, High Contamination',
+      cluster_median_hSAINT_score > 0.5 &
+        cluster_contam_perc <
+        cluster_scores |> 
+        dplyr::pull(contam_perc) |> 
+        stats::median() ~ 'High hSAINT, Low Contamination',
+      cluster_median_hSAINT_score < 0.5 &
+        cluster_contam_perc > 
+        cluster_scores |> 
+        dplyr::pull(contam_perc) |> 
+        stats::median() ~ 'Low hSAINT, High Contamination',
+      cluster_median_hSAINT_score < 0.5 &
+        cluster_contam_perc <
+        cluster_scores |> 
+        dplyr::pull(contam_perc) |> 
+        stats::median() ~ 'Low hSAINT, Low Contamination'
+    )) |> 
+  dplyr::relocate(cluster_class, .after = cluster) |> 
+  dplyr::arrange(desc(protein_hSAINT_score), Protein)
 ```
 
 ## Cluster GO GSEA
@@ -299,7 +317,7 @@ protein_cluster_df <- clusters_df |>
 ```{r Downstream Analysis}
 EntrezIDs <- AnnotationDbi::select(
   org.Hs.eg.db,
-  keys = modules_df |> dplyr::distinct(Protein) |> dplyr::pull(),
+  keys = clusters_df |> dplyr::distinct(Protein) |> dplyr::pull(),
   columns = 'ENTREZID',
   keytype = 'SYMBOL'
 ) |> 
@@ -377,7 +395,12 @@ progressr::with_progress({
 
       genes <- clusters_df |>
         dplyr::filter(cluster == mod) |>
-        dplyr::inner_join(EntrezIDs |> dplyr::rename(Protein = 1)) |> 
+        dplyr::inner_join(EntrezIDs |> 
+                            dplyr::rename(Protein = 1) |> 
+                            dplyr::filter(!is.na(ENTREZID))) |>
+        dplyr::inner_join(protein_cluster_df |> 
+                            dplyr::filter(contam_flag == 0) |> 
+                            dplyr::distinct(Protein)) |> 
         dplyr::distinct(ENTREZID) |>
         dplyr::pull(ENTREZID)
 
@@ -417,7 +440,7 @@ global_enrichment_results_df <- lapply(enrichment_results, function(x) {
 ```
 
 ```{r Load Cluster GO GSEA, eval = TRUE, echo = FALSE}
-load("../../analysis/R/hClust/HierarchicalCluster_GO_GSEA.rda")
+load("R/hClust/HierarchicalCluster_GO_GSEA.rda")
 global_enrichment_results_df <- HierarchicalCluster_GO_GSEA
 rm(HierarchicalCluster_GO_GSEA)
 ```
@@ -502,57 +525,145 @@ subclusters_df <- subclusters_from_hclust(
 ```
 
 ```{r Show GSEA on SubClusters, eval= FALSE, echo = TRUE}
-# perform GO GSEA on the subclusters
+future::plan(future::multisession, workers = 6)
+progressr::handlers(progressr::handler_txtprogressbar())
 
-subcluster_enrichment_results <- subclusters_df %>%
-  dplyr::inner_join(EntrezIDs |> dplyr::rename(Protein = 1)) |> 
-  dplyr::group_by(cluster, subcluster) %>%
-  dplyr::group_modify(~ {
+subcluster_enrichment_df <- progressr::with_progress({
 
-    # subcluster genes
-    genes <- .x$ENTREZID
-    
-    background_genes <- unique(subclusters_df$ENTREZID[subclusters_df$cluster == .y$cluster])
+  p <- progressr::progressor(steps = nrow(sub_ids))
 
-    tibble::tibble(
-      BP = list(get_GO(genes, ontology = "BP", background_genes = background_genes)),
-      CC = list(get_GO(genes, ontology = "CC", background_genes = background_genes)),
-      MF = list(get_GO(genes, ontology = "MF", background_genes = background_genes))
-    )
-  }) %>%
-  dplyr::ungroup()
-rm(background_genes)
+  res_list <- future.apply::future_lapply(
+    seq_len(nrow(sub_ids)),
+    function(i) {
+  
+      library(clusterProfiler)
+      library(dplyr)
+  
+      get_GO <- get_GO
+
+      cl <- sub_ids$cluster[i]
+      sc <- sub_ids$subcluster[i]
+
+      p(sprintf("cluster %s subcluster %s", cl, sc))
+
+      # only genes without any contamination
+      genes <- subclusters_df |>
+        dplyr::filter(cluster == cl, subcluster == sc) |>
+        dplyr::inner_join(
+          EntrezIDs |>
+            dplyr::filter(!is.na(ENTREZID)) |>
+            dplyr::rename(Protein = 1),
+          by = "Protein"
+        ) |>
+        dplyr::inner_join(
+          protein_cluster_df |>
+            dplyr::filter(contam_flag == 0) |>
+            dplyr::distinct(Protein),
+          by = "Protein"
+        ) |>
+        dplyr::distinct(ENTREZID) |>
+        dplyr::pull()
+
+      # all genes within a given cluster
+      background_genes <- subclusters_df |>
+        dplyr::filter(cluster == cl) |>
+        dplyr::inner_join(
+          EntrezIDs |>
+            dplyr::filter(!is.na(ENTREZID)) |>
+            dplyr::rename(Protein = 1),
+          by = "Protein"
+        ) |>
+        dplyr::distinct(ENTREZID) |>
+        dplyr::pull()
+
+      out <- list()
+
+      for (ont in c("BP", "CC", "MF")) {
+
+        res <- get_GO(genes, ontology = ont, background_genes = background_genes)
+
+        if (!is.null(res)) {
+          if (nrow(res@result) > 0) {
+            df <- as.data.frame(res)
+            if (nrow(df) > 0) {
+              df$cluster <- cl
+              df$subcluster <- sc
+              df$GO_Category <- ont
+              out[[length(out) + 1]] <- df
+            }
+          }
+        }
+      }
+
+      if (length(out) == 0) {
+        return(NULL)
+      } else {
+        return(dplyr::bind_rows(out))
+      }
+    }
+  )
+
+  dplyr::bind_rows(res_list)
+})
 ```
 
 ```{r Gather SubCluster GSEA data, eval = FALSE, echo = TRUE}
 # wrangle the sub-cluster GO GSEA results
-subcluster_enrichment_results_df <- subcluster_enrichment_results |> 
-    tidyr::pivot_longer(
-      cols      = c('BP', 'CC', 'MF'),
-      names_to  = "GO_Category",
-      values_to = "values"
-    ) %>%
-    dplyr::mutate(
-      GO_tbl = purrr::map(values, ~ as.data.frame(.x))
-    ) |>
-    tidyr::unnest(GO_tbl) |>
-    dplyr::rename(
-      GO_ID   = ID,
-      GO_Term = Description
-    ) |>
-    dplyr::select(
-      cluster,
-      subcluster,
-      GO_Category,
-      GO_Term,
-      GO_ID,
-      dplyr::everything(),
-      -values
-    )
+subcluster_enrichment_results_df <- purrr::map_dfr(
+  subcluster_enrichment,
+  function(x) {
+
+    out <- list()
+
+    for (ont in c("BP", "CC", "MF")) {
+
+      slot_name <- paste0("go_", tolower(ont))
+
+      res <- x[[slot_name]]
+
+      if (!is.null(res)) {
+        df <- res@result
+        if (is.data.frame(df)) {
+          if (nrow(df) > 0) {
+
+            df$cluster <- x$cluster
+            df$subcluster <- x$subcluster
+            df$GO_Category <- ont
+
+            out[[length(out) + 1]] <- df
+          }
+        }
+      }
+    }
+
+    if (length(out) == 0) {
+      return(NULL)
+    } else {
+      return(dplyr::bind_rows(out))
+    }
+  }
+) |> 
+  dplyr::rename(GO_ID = ID, GO_Term = Description) |> 
+  dplyr::relocate(c(cluster, subcluster, GO_Category), .before = 1) |> 
+  tibble::rowid_to_column('id') |> 
+  dplyr::filter(!is.na(GO_Category)) |> 
+  dplyr::select(-id) |> 
+  dplyr::full_join(
+    cluster_scores
+  ) |>
+  dplyr::inner_join(
+    protein_cluster_df |> dplyr::distinct(cluster, cluster_class)
+  ) |> 
+  dplyr::group_by(cluster) |> 
+  dplyr::arrange(desc(mean_hSAINT_score), contam_perc, p.adjust) |> 
+  dplyr::rename_with(.cols = c(mean_hSAINT_score:CRAPome_flag_perc), ~paste0('cluster_', .x))
+
+subcluster_enrichment_results_df |> 
+  head()
 ```
 
 ```{r Load SubCluster GO GSEA, eval = TRUE, echo = FALSE}
-load("../../analysis/R/hClust/HierarchicalSubModCluster_GO_GSEA.rda")
+load("R/hClust/HierarchicalSubClustCluster_GO_GSEA.rda")
 ```
 
 ```{r Find UnEnriched SubClusters}
@@ -637,10 +748,10 @@ global_enrichment_results_df |>
   ggplot2::ggplot(
     ggplot2::aes(
       x = -log10(p.adjust),
-      y = forcats::fct_rev(forcats::fct_infreq(GO_Term, mean_score)),
+      y = forcats::fct_rev(forcats::fct_infreq(GO_Term, median_hSAINT_score)),
       color = GO_Category,
       size = FoldEnrichment,
-      alpha = mean_score,
+      alpha = median_hSAINT_score,
       shape = is_enriched,
     )
   ) +
@@ -654,7 +765,7 @@ global_enrichment_results_df |>
   ggplot2::labs(title = 'GO Enrichment Across\nClusters and SubClusters\nin TMEM184B IPMS\nHierarchical Clustering',
                 x = '-log10(Adj.P-val)',
                 y = 'GO Term',
-                alpha = 'Cluster\nMean\nHierarchical\nSAINT\nScore',
+                alpha = 'Cluster\nMedian\nHierarchical\nhSAINT\nScore',
                 size = 'FoldEnrichment',
                 color = 'GO Category',
                 shape = 'IsEnrichedcluster') +
@@ -691,7 +802,7 @@ visNetwork::visNetwork(
     id    = igraph::V(g)$name,
     label = igraph::V(g)$name,
     size = scales::rescale(
-      (\(x){ x[is.na(x)] <- 0; x })(igraph::V(g)$score_mass),
+      (\(x){ x[is.na(x)] <- 0; x })(igraph::V(g)$hSAINT_score_mass),
       to = c(20, 60)
     ),
     x = coords[,1],
@@ -731,7 +842,7 @@ visNetwork::visNetwork(
           unique()
 
         term <- igraph::V(g)[v]$name
-        saint_value <- igraph::V(g)[v]$score_mass
+        saint_value <- igraph::V(g)[v]$hSAINT_score_mass
         if (is.na(saint_value)) saint_value <- 0
         is_cluster <- nzchar(igraph::V(g)[v]$subcluster)
 
