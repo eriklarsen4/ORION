@@ -86,16 +86,18 @@ load("../../analysis/R/precompute_objects.rda")
 ```{r Second Data Load, echo = FALSE}
 rm(IPMS_mat_log)
 hSAINT <- hSAINT |> 
-  dplyr::rename(hSAINT_score = score) |> 
-  dplyr::mutate(contam_flag = lit_flag + CRAPome_flag, .before = lit_flag) |> 
-  dplyr::mutate(protein_stat_class = dplyr::case_when(hSAINT_score > 0.5 & 
-                                                contam_flag < 1 ~ 'High hSAINT, Low Contamination',
-                                              hSAINT_score < 0.5 &
-                                                contam_flag < 1 ~ 'Low hSAINT, Low Contamination',
-                                              hSAINT_score > 0.5 &
-                                                contam_flag > 0 ~ 'High hSAINT, High Contamination',
-                                              hSAINT_score < 0.5 &
-                                                contam_flag > 0 ~ 'Low hSAINT, High Contamination'))
+  dplyr::mutate(protein_stat_class = dplyr::case_when(score > 0.5 & 
+                                                lit_flag + CRAPome_flag < 1 ~ 'High hSAINT, Low Contamination',
+                                              score < 0.5 &
+                                                lit_flag + CRAPome_flag < 1 ~ 'Low hSAINT, Low Contamination',
+                                              score > 0.5 &
+                                                lit_flag + CRAPome_flag > 0 ~ 'High hSAINT, High Contamination',
+                                              score < 0.5 &
+                                                lit_flag + CRAPome_flag > 0 ~ 'Low hSAINT, High Contamination'),
+                contam_flag = lit_flag + CRAPome_flag) |> 
+  dplyr::rename(protein_hSAINT_score = score) |> 
+  dplyr::rename_with(.cols = c(dplyr::contains("flag")), ~paste0('protein_', .x)) |> 
+  dplyr::relocate(protein_contam_flag, .after = protein_hSAINT_score)
 ```
 
 
@@ -253,41 +255,23 @@ cluster_scores <- clusters_df |>
   dplyr::inner_join(
     hSAINT
   ) |> 
-  dplyr::arrange(desc(hSAINT_score)) |> 
+  dplyr::arrange(desc(protein_hSAINT_score)) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::summarize(mean_hSAINT_score = mean(hSAINT_score),
-                   median_hSAINT_score = stats::median(hSAINT_score),
-                   hSAINT_score_mass = sum(hSAINT_score),
-                   n = dplyr::n(),
-                   lit_flag_perc = (sum(lit_flag)/n)*100,
-                   CRAPome_flag_perc = (sum(CRAPome_flag)/n)*100) |> 
-  dplyr::mutate(contam_perc = lit_flag_perc + CRAPome_flag_perc, .before = lit_flag_perc) |> 
-  dplyr::arrange(desc(mean_hSAINT_score)) |> 
-  dplyr::mutate(mean_rank = dplyr::row_number()) |> 
-  dplyr::arrange(desc(median_hSAINT_score)) |> 
-  dplyr::mutate(median_rank = dplyr::row_number()) |> 
-  dplyr::arrange(desc(hSAINT_score_mass)) |> 
-  dplyr::mutate(total_rank = dplyr::row_number()) |> 
-  dplyr::arrange(mean_rank) |> 
-  dplyr::rename_with(.cols = c(mean_hSAINT_score:total_rank), ~paste0('cluster_', .x)) |> 
-  dplyr::mutate(cluster_class = dplyr::case_when(
-    cluster_median_hSAINT_score > 
-      stats::median(cluster_median_hSAINT_score) &
-      cluster_contam_perc > 
-      stats::median(cluster_contam_perc) ~ 'High hSAINT, High Contamination',
-    cluster_median_hSAINT_score > 
-      stats::median(cluster_median_hSAINT_score) &
-      cluster_contam_perc < 
-      stats::median(cluster_contam_perc) ~ 'High hSAINT, Low Contamination',
-    cluster_median_hSAINT_score < 
-      stats::median(cluster_median_hSAINT_score) &
-      cluster_contam_perc > 
-      stats::median(cluster_contam_perc) ~ 'Low hSAINT, High Contamination',
-    cluster_median_hSAINT_score < 
-      stats::median(cluster_median_hSAINT_score) &
-      cluster_contam_perc < 
-      stats::median(cluster_contam_perc) ~ 'Low hSAINT, Low Contamination'
-  ), .after = cluster)
+  dplyr::summarize(cluster_mean_hSAINT_score = mean(protein_hSAINT_score),
+                   cluster_median_hSAINT_score = stats::median(protein_hSAINT_score),
+                   cluster_hSAINT_score_mass = sum(protein_hSAINT_score),
+                   cluster_size = dplyr::n(),
+                   cluster_lit_flag_perc = (sum(protein_lit_flag)/cluster_size)*100,
+                   cluster_CRAPome_flag_perc = (sum(protein_CRAPome_flag)/cluster_size)*100,
+                   cluster_contam_perc = cluster_lit_flag_perc + cluster_CRAPome_flag_perc) |> 
+  dplyr::arrange(desc(cluster_mean_hSAINT_score), cluster_contam_perc) |> 
+  dplyr::mutate(cluster_mean_rank = dplyr::row_number()) |> 
+  dplyr::arrange(desc(cluster_median_hSAINT_score), cluster_contam_perc) |> 
+  dplyr::mutate(cluster_median_rank = dplyr::row_number()) |> 
+  dplyr::arrange(desc(cluster_hSAINT_score_mass), cluster_contam_perc) |> 
+  dplyr::mutate(cluster_total_rank = dplyr::row_number()) |> 
+  dplyr::arrange(cluster_mean_rank) |> 
+  dplyr::relocate(c(cluster_lit_flag_perc, cluster_CRAPome_flag_perc), .after = cluster_total_rank)
 ```
 
 Join the cluster scores to the cluster (per protein) dataframe and the `hSAINT` results for classification

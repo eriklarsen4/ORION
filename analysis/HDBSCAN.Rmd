@@ -35,7 +35,7 @@ knitr::opts_chunk$set(
   fig.width = 10,
   fig.height = 12,
   dev = c("png", "pdf"),
-  fig.path = "R/SpectralClustering/"
+  fig.path = "R/HDBSCAN/"
 )
 ```
 
@@ -87,15 +87,18 @@ rm(IPMS_mat_Z)
 
 ```{r Thid Data Load, echo = TRUE}
 hSAINT <- hSAINT |> 
-  dplyr::mutate(stat_class = dplyr::case_when(score > 0.5 & 
+  dplyr::mutate(protein_stat_class = dplyr::case_when(score > 0.5 & 
                                                 lit_flag + CRAPome_flag < 1 ~ 'High hSAINT, Low Contamination',
                                               score < 0.5 &
                                                 lit_flag + CRAPome_flag < 1 ~ 'Low hSAINT, Low Contamination',
                                               score > 0.5 &
                                                 lit_flag + CRAPome_flag > 0 ~ 'High hSAINT, High Contamination',
                                               score < 0.5 &
-                                                lit_flag + CRAPome_flag > 0 ~ 'Low hSAINT, High Contamination')) |> 
-  dplyr::rename(hSAINT_score = score)
+                                                lit_flag + CRAPome_flag > 0 ~ 'Low hSAINT, High Contamination'),
+                contam_flag = lit_flag + CRAPome_flag) |> 
+  dplyr::rename(protein_hSAINT_score = score) |> 
+  dplyr::rename_with(.cols = c(dplyr::contains("flag")), ~paste0('protein_', .x)) |> 
+  dplyr::relocate(protein_contam_flag, .after = protein_hSAINT_score)
 ```
 
 ```{r, results='asis', echo=FALSE}
@@ -183,7 +186,7 @@ Plot the PCs
 
 ## PCA Plot
 
-```{r PCA Plot}
+```{r PCA Plot, fig.height=12}
 pca_results_df <- tibble::tibble(
   PC1 = X[ , 1],
   PC2 = X[ , 2],
@@ -289,23 +292,23 @@ cluster_scores <- clusters_df |>
   dplyr::inner_join(
     hSAINT
   ) |> 
-  dplyr::arrange(desc(hSAINT_score)) |> 
+  dplyr::arrange(desc(protein_hSAINT_score)) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::summarize(mean_hSAINT_score = mean(hSAINT_score),
-                   median_hSAINT_score = stats::median(hSAINT_score),
-                   hSAINT_score_mass = sum(hSAINT_score),
-                   n = dplyr::n(),
-                   lit_flag_perc = (sum(lit_flag)/n)*100,
-                   CRAPome_flag_perc = (sum(CRAPome_flag)/n)*100,
-                   contam_perc = lit_flag_perc + CRAPome_flag_perc) |> 
-  dplyr::arrange(desc(mean_hSAINT_score), contam_perc) |> 
-  dplyr::mutate(mean_rank = dplyr::row_number()) |> 
-  dplyr::arrange(desc(median_hSAINT_score), contam_perc) |> 
-  dplyr::mutate(median_rank = dplyr::row_number()) |> 
-  dplyr::arrange(desc(hSAINT_score_mass), contam_perc) |> 
-  dplyr::mutate(total_rank = dplyr::row_number()) |> 
-  dplyr::arrange(mean_rank) |> 
-  dplyr::relocate(c(lit_flag_perc, CRAPome_flag_perc), .after = total_rank)
+  dplyr::summarize(cluster_mean_hSAINT_score = mean(protein_hSAINT_score),
+                   cluster_median_hSAINT_score = stats::median(protein_hSAINT_score),
+                   cluster_hSAINT_score_mass = sum(protein_hSAINT_score),
+                   cluster_size = dplyr::n(),
+                   cluster_lit_flag_perc = (sum(protein_lit_flag)/cluster_size)*100,
+                   cluster_CRAPome_flag_perc = (sum(protein_CRAPome_flag)/cluster_size)*100,
+                   cluster_contam_perc = cluster_lit_flag_perc + cluster_CRAPome_flag_perc) |> 
+  dplyr::arrange(desc(cluster_mean_hSAINT_score), cluster_contam_perc) |> 
+  dplyr::mutate(cluster_mean_rank = dplyr::row_number()) |> 
+  dplyr::arrange(desc(cluster_median_hSAINT_score), cluster_contam_perc) |> 
+  dplyr::mutate(cluster_median_rank = dplyr::row_number()) |> 
+  dplyr::arrange(desc(cluster_hSAINT_score_mass), cluster_contam_perc) |> 
+  dplyr::mutate(cluster_total_rank = dplyr::row_number()) |> 
+  dplyr::arrange(cluster_mean_rank) |> 
+  dplyr::relocate(c(cluster_lit_flag_perc, cluster_CRAPome_flag_perc), .after = cluster_total_rank)
 
 head(cluster_scores)
 ```
@@ -321,35 +324,36 @@ protein_cluster_df <- clusters_df |>
     cluster_scores |> 
       dplyr::ungroup()
   ) |> 
-  dplyr::rename_with(.cols = c(mean_hSAINT_score:CRAPome_flag_perc), ~paste0("cluster_", .x)) |> 
-  dplyr::rename_with(.cols = c(hSAINT_score:stat_class), ~paste0("protein_", .x)) |> 
-  dplyr::mutate(contam_flag = protein_lit_flag + protein_CRAPome_flag, .after = protein_hSAINT_score) %>%
   dplyr::mutate(dplyr::across(c(dplyr::where(is.double)), ~ round(.x, 3))) |> 
   dplyr::mutate(
     cluster_class = dplyr::case_when(
       cluster_median_hSAINT_score > 0.5 &
         cluster_contam_perc > 
         cluster_scores |> 
-        dplyr::pull(contam_perc) |> 
+        dplyr::pull(cluster_contam_perc) |> 
         stats::median() ~ 'High hSAINT, High Contamination',
       cluster_median_hSAINT_score > 0.5 &
         cluster_contam_perc <
         cluster_scores |> 
-        dplyr::pull(contam_perc) |> 
+        dplyr::pull(cluster_contam_perc) |> 
         stats::median() ~ 'High hSAINT, Low Contamination',
       cluster_median_hSAINT_score < 0.5 &
         cluster_contam_perc > 
         cluster_scores |> 
-        dplyr::pull(contam_perc) |> 
+        dplyr::pull(cluster_contam_perc) |> 
         stats::median() ~ 'Low hSAINT, High Contamination',
       cluster_median_hSAINT_score < 0.5 &
         cluster_contam_perc <
         cluster_scores |> 
-        dplyr::pull(contam_perc) |> 
+        dplyr::pull(cluster_contam_perc) |> 
         stats::median() ~ 'Low hSAINT, Low Contamination'
     )) |> 
   dplyr::relocate(cluster_class, .after = cluster) |> 
-  dplyr::arrange(desc(protein_hSAINT_score), Protein)
+  dplyr::arrange(desc(protein_hSAINT_score), Protein) |> 
+  dplyr::group_by(cluster) |> 
+  dplyr::mutate(cluster_clean_n = sum(protein_contam_flag), .after = cluster_size) |> 
+  dplyr::mutate(cluster_clean_fraction = round((cluster_clean_n/cluster_size)*100, 2), .after = cluster_clean_n) |> 
+  dplyr::ungroup()
 
 head(protein_cluster_df)
 ```
@@ -435,17 +439,40 @@ progressr::with_progress({
 
       # tick the progress bar
       p(sprintf("cluster %s", mod))
+      
+      suppressPackageStartupMessages({
+          library(clusterProfiler)
+          library(DOSE)
+          library(org.Hs.eg.db)
+          library(dplyr) 
+        })
+    
+        get_GO <- get_GO   # export the function so it's recognized for parallelization
+        protein_cluster_df <- protein_cluster_df
+        clusters_df <- clusters_df
 
-      genes <- clusters_df |>
-        dplyr::filter(cluster == mod) |>
-        dplyr::inner_join(EntrezIDs |> 
-                            dplyr::rename(Protein = 1)) |> # get ENTREZID's
-        dplyr::inner_join(protein_cluster_df |> 
-                            dplyr::filter(contam_flag == 0) |> 
-                            dplyr::distinct(Protein)) |> # filter out any proteins ID'd in literature or in > 5% of CRAPome studies as contaminants
-        
-        dplyr::distinct(ENTREZID) |>
-        dplyr::pull(ENTREZID)
+        # proteins without any contamination except for one cluster
+        genes <- clusters_df |>
+          dplyr::filter(cluster == mod) |>
+          dplyr::inner_join(EntrezIDs |> 
+                              dplyr::rename(Protein = 1)) |> # get ENTREZID's
+          dplyr::inner_join(protein_cluster_df |> 
+                                dplyr::filter((cluster_median_hSAINT_score > 0.5 &
+                                                 cluster_clean_fraction < 5 &
+                                                 protein_contam_flag < 2 ) |
+                                                protein_contam_flag == 0) |> 
+                              dplyr::distinct(Protein)) |> # filter out any proteins ID'd in literature or in > 5% of CRAPome studies as contaminants
+          
+          dplyr::distinct(ENTREZID) |>
+          dplyr::pull(ENTREZID)
+      
+      # all proteins within a given cluster
+        background_genes <- clusters_df |> 
+          dplyr::filter(cluster == mod) |> 
+          dplyr::inner_join(EntrezIDs |> 
+                              dplyr::rename(Protein = 1)) |> 
+          dplyr::distinct(ENTREZID) |> 
+          dplyr::pull()
 
       list(
         cluster = mod,
@@ -487,8 +514,8 @@ global_enrichment_results_df <- lapply(enrichment_results, function(x) {
       dplyr::distinct(cluster, cluster_class)
   ) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::arrange(desc(mean_hSAINT_score), contam_perc, p.adjust) |> 
-  dplyr::rename_with(.cols = c(mean_hSAINT_score:CRAPome_flag_perc), ~paste0('cluster_', .x))
+  dplyr::arrange(cluster_contam_perc, desc(cluster_median_hSAINT_score), p.adjust) |> 
+  dplyr::relocate(cluster_class, .after = cluster)
 
 global_enrichment_results_df |> 
   head()
@@ -500,33 +527,19 @@ global_enrichment_results_df <- HDBSCANCluster_GO_GSEA
 rm(HDBSCANCluster_GO_GSEA)
 
 global_enrichment_results_df |> 
-  dplyr::full_join(cluster_scores |> 
-                     dplyr::rename_with(.cols = c(
-                       mean_hSAINT_score:CRAPome_flag_perc), 
-                                        ~paste0('cluster_', .x))) |> 
-  dplyr::filter(!is.na(GO_Category)) |> 
-  dplyr::inner_join(
-    protein_cluster_df |>
-      dplyr::distinct(cluster, cluster_class)
-  ) |>
-  dplyr::group_by(cluster) |> 
-  dplyr::arrange(desc(cluster_median_hSAINT_score), 
-                 cluster_contam_perc, 
-                 p.adjust) |> 
   head()
 ```
 
-The "`High SAINT score`" clusters were among the clusters with significant 
-enrichment of all the proteins detected in the experiments
-
-However, many clusters (**30**) did not have significant enrichment relative to 
-the entire set of proteins in the experiments
+Filtering proteins devoid of contamination by literature review or CRAPome frequency
+substantially alters the GO enrichment of clusters, leaving the larger clusters-- 
+typically, the "background" clusters or "clean, signal-less" clusters -- to 
+provide the enrichment
 
 **TMEM is clustered into the noise cluster**, likely because of its low-variance
 counts across treatments and weak correlation with other protein abundances; this 
 is not uncommon for a transmembrane protein with no prior for potential interactors
 
-Using `hierarchical SAINT score` as a explanatory tool, this is likely because 
+Using `hierarchical SAINT score` as an explanatory tool, this is likely because 
 the clusters without GO enrichment contained a large mix of proteins scored as 
 "noise" (low posterior probability of being a true interactor) and signal 
 (high posterior probability of being a true interactor)
@@ -626,6 +639,8 @@ progressr::handlers(progressr::handler_txtprogressbar())
 
 subcluster_enrichment_df <- progressr::with_progress({
 
+  sub_ids <- subclusters_df |> dplyr::distinct(cluster, subcluster)
+  
   p <- progressr::progressor(steps = nrow(sub_ids))
 
   res_list <- future.apply::future_lapply(
@@ -636,6 +651,8 @@ subcluster_enrichment_df <- progressr::with_progress({
       library(dplyr)
   
       get_GO <- get_GO
+      subclusters_df <- subclusters_df
+      protein_cluster_df <- protein_cluster_df
 
       cl <- sub_ids$cluster[i]
       sc <- sub_ids$subcluster[i]
@@ -652,9 +669,11 @@ subcluster_enrichment_df <- progressr::with_progress({
           by = "Protein"
         ) |>
         dplyr::inner_join(
-          protein_cluster_df |>
-            dplyr::filter(contam_flag == 0) |>
-            dplyr::distinct(Protein),
+          protein_cluster_df |> 
+            dplyr::filter((cluster_median_hSAINT_score > 0.5 &
+                             cluster_clean_fraction < 5 &
+                             protein_contam_flag < 2 ) |
+                            protein_contam_flag == 0),
           by = "Protein"
         ) |>
         dplyr::distinct(ENTREZID) |>
@@ -706,40 +725,7 @@ subcluster_enrichment_df <- progressr::with_progress({
 
 ```{r Gather SubCluster GSEA data, eval = FALSE, echo = TRUE}
 # wrangle the sub-cluster GO GSEA results
-subcluster_enrichment_results_df <- purrr::map_dfr(
-  subcluster_enrichment,
-  function(x) {
-
-    out <- list()
-
-    for (ont in c("BP", "CC", "MF")) {
-
-      slot_name <- paste0("go_", tolower(ont))
-
-      res <- x[[slot_name]]
-
-      if (!is.null(res)) {
-        df <- res@result
-        if (is.data.frame(df)) {
-          if (nrow(df) > 0) {
-
-            df$cluster <- x$cluster
-            df$subcluster <- x$subcluster
-            df$GO_Category <- ont
-
-            out[[length(out) + 1]] <- df
-          }
-        }
-      }
-    }
-
-    if (length(out) == 0) {
-      return(NULL)
-    } else {
-      return(dplyr::bind_rows(out))
-    }
-  }
-) |> 
+subcluster_enrichment_results_df <- subcluster_enrichment_df |> 
   dplyr::rename(GO_ID = ID, GO_Term = Description) |> 
   dplyr::relocate(c(cluster, subcluster, GO_Category), .before = 1) |> 
   tibble::rowid_to_column('id') |> 
@@ -751,9 +737,8 @@ subcluster_enrichment_results_df <- purrr::map_dfr(
   dplyr::inner_join(
     protein_cluster_df |> dplyr::distinct(cluster, cluster_class)
   ) |> 
-  dplyr::group_by(cluster) |> 
-  dplyr::arrange(desc(mean_hSAINT_score), contam_perc, p.adjust) |> 
-  dplyr::rename_with(.cols = c(mean_hSAINT_score:CRAPome_flag_perc), ~paste0('cluster_', .x))
+  dplyr::filter(!is.na(GO_Category)) |> 
+  dplyr::relocate(cluster_class, .after = cluster)
 
 subcluster_enrichment_results_df |> 
   head()
@@ -894,9 +879,9 @@ g <- igraph::graph_from_data_frame(
   directed = TRUE,
   vertices =
     dplyr::bind_rows(
-      go_network |> dplyr::transmute(name = node_from, hSAINT_score_mass, subcluster),
+      go_network |> dplyr::transmute(name = node_from, cluster_hSAINT_score_mass, subcluster),
       go_network |> dplyr::transmute(name = node_to,
-                                     hSAINT_score_mass = NA_real_,
+                                     cluster_hSAINT_score_mass = NA_real_,
                                      subcluster = NA_character_)
     ) |>
     dplyr::distinct(name, .keep_all = TRUE)
@@ -920,7 +905,6 @@ if (identical(fmt, "html")) {
 ```{r RawClusterSubClusterDotPlotOfGOTerms, warning = F, message = F, fig.height=18}
 global_enrichment_results_df |> 
   dplyr::full_join(subcluster_enrichment_results_df) |> 
-  dplyr::full_join(cluster_scores) |> 
   dplyr::filter(!is.na(GO_Term)) |> 
   dplyr::filter(!is.na(GO_Category)) |> 
   dplyr::filter(!is.na(cluster_median_hSAINT_score)) |> 
@@ -957,21 +941,20 @@ global_enrichment_results_df |>
   ggplot2::labs(title = 'GO Enrichment Across\nClusters and SubClusters\nin TMEM184B IPMS\nHDBSCAN',
                 x = '-log10(Adj.P-val)',
                 y = 'GO Term',
-                alpha = 'Cluster\nMean\nHierarchical\nSAINT\nScore',
+                alpha = 'Cluster\nMedian\nHierarchical\nSAINT\nScore',
                 size = 'FoldEnrichment',
                 color = 'GO Category',
                 shape = 'IsEnrichedCluster') +
   ggplot2::theme_bw() +
   ggplot2::theme(title = ggplot2::element_text(face = 'bold', size = 12),
                  axis.text = ggplot2::element_text(face = 'bold', size = 10),
-                 strip.text = ggplot2::element_text(face = 'bold', size = 7), 
+                 strip.text = ggplot2::element_text(face = 'bold', size = 10), 
                  strip.background = ggplot2::element_rect(color = 'black',
                                                           fill = 'white')) +
   ggplot2::guides(#shape = ggplot2::guide_legend(override.aes = list(size = 4, shape = c(19, 17))),
-                  color = ggplot2::guide_legend(override.aes = list(size = 4,
+                  color = ggplot2::guide_legend(override.aes = list(size = 5,
                                                                     shape = 19,
                                                                     color = c('navy',
-                                                                              'darkgoldenrod3',
                                                                               'firebrick'))),
                   alpha = ggplot2::guide_legend(override.aes = list(size = 5,
                                                                     shape = 19)),
@@ -979,7 +962,6 @@ global_enrichment_results_df |>
                   # size = 'none'
                   ) +
   ggplot2::scale_color_manual(values = c('navy',
-                                        'darkgoldenrod3',
                                         'firebrick'))
 ```
 
@@ -994,7 +976,7 @@ visNetwork::visNetwork(
     id    = igraph::V(g)$name,
     label = igraph::V(g)$name,
     size = scales::rescale(
-      (\(x){ x[is.na(x)] <- 0; x })(igraph::V(g)$hSAINT_score_mass),
+      (\(x){ x[is.na(x)] <- 0; x })(igraph::V(g)$cluster_hSAINT_score_mass),
       to = c(20, 60)
     ),
     x = coords[,1],
@@ -1034,7 +1016,7 @@ visNetwork::visNetwork(
           unique()
 
         term <- igraph::V(g)[v]$name
-        saint_value <- igraph::V(g)[v]$hSAINT_score_mass
+        saint_value <- igraph::V(g)[v]$cluster_hSAINT_score_mass
         if (is.na(saint_value)) saint_value <- 0
         is_module <- nzchar(igraph::V(g)[v]$subcluster)
 
@@ -1136,23 +1118,10 @@ DT::datatable(
                        tidyr::unnest_longer(Protein) |> 
                        dplyr::distinct(Protein, .keep_all = T) |> 
                        dplyr::relocate(c(Protein, cluster, subcluster), .before = 1) |> 
-                       dplyr::select(-c(Count:cluster_class))
+                       dplyr::select(-c(Count:weight))
                      ) |> 
-    dplyr::rename(cluster_size = cluster_n) |>
     dplyr::filter(!is.na(GO_Term)) |> 
-    dplyr::filter(!is.na(GO_Category)) |> 
-    dplyr::filter( grepl(cluster_class,
-                            pattern = 'High hSAINT') &
-                     grepl(protein_stat_class, pattern = 'High hSAINT')
-                   ) |> 
-    dplyr::mutate(dplyr::across(c(dplyr::contains("score"),
-                                  dplyr::contains("mass"),
-                                  dplyr::contains("perc"),
-                                  dplyr::contains("rich", ignore.case = T),
-                                  dplyr::contains("pv", ignore.case = F),
-                                  dplyr::contains("p."),
-                                  dplyr::starts_with("q")), ~round(., 3))) |> 
-    dplyr::select(-c(dplyr::contains("node"),weight,Tier))
+    dplyr::filter(!is.na(GO_Category))
 )
 ```
 
@@ -1162,17 +1131,9 @@ This table exists as [HDBSCAN_protein_level_GO_GSEA.rda](../../analysis/R/HDBSCA
 
 ```{r Print Cluster Level Results Table}
 DT::datatable(
-  global_enrichment_results_df |> 
-    dplyr::full_join(subcluster_enrichment_results_df) |> 
+  GO_df |> 
     dplyr::full_join(cluster_scores) |> 
-    dplyr::relocate(subcluster, .after = cluster) |> 
-    dplyr::relocate(cluster_class, .after = subcluster) |> 
-    dplyr::rename(cluster_size = cluster_n) |> 
-    dplyr::select(-c(mean_hSAINT_score:CRAPome_flag_perc)) |> 
-    dplyr::filter(!is.na(GO_Term)) |> 
-    dplyr::filter(!is.na(GO_Category)) %>%
-    dplyr::mutate(dplyr::across(dplyr::where(is.double), ~round(.x, 3))) |> 
-    dplyr::arrange(cluster_contam_perc, desc(cluster_hSAINT_score_mass))
+    dplyr::select(-c(Tier:weight))
 )
 ```
 
@@ -1192,12 +1153,17 @@ if (identical(fmt, "html")) {
 
 
 The largest clusters, at least one of which is "noise", intuitively have the largest
-`hSAINT_score_mass`. However, when prefacing this first by low contaminant clusters,
-**Cluster 25** has the highest volume of `hSAINT` signal across clusters, with some 
-interesting potential candidates. **6** other clusters (**25**, **7**, **10**, 
-**24**, **4**, and **15**) had cluster `hSAINT` scores higher than the median 
-cluster `hSAINT` score and with zero contaminants. Some of the GO Terms across 
-these groups confirm guesses of potential `TMEM` interactors
+`cluster_hSAINT_score_mass`. However, when sorting this first by low contaminant 
+clusters (`cluster_contam_perc`), **Cluster 25** has the highest volume of 
+`hSAINT` signal across clusters, with some interesting potential candidates 
+
+**Cluster 29** had a `cluster_hSAINT_score_mass` higher than the overall 
+`cluster_hSAINT_score_mass` median score and with zero contaminants
+
+Few clusters returned enriched `GO Terms`, likely due to `HDBSCAN`'s tendency to 
+create many smaller-sized clusters. When coupled with the contamination filter 
+on cluster member proteins (further limiting the number of proteins available 
+on which to detect enrichment), this reduces the vast majority of `GO Terms`
 
 
 As noted above, it is mildly surprising `TMEM` is in the "noise" cluster, due to 
