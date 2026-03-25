@@ -27,6 +27,8 @@ TMEM184B immunoprecipitation tandem mass-spec (IP-MS/MS) based on experiments fo
 **Dr. Martha Bhattacharya's lab** at the **University of Arizona** for the
 endolysosomal paper under revision (2025-02-28) for the Journal of Cell Science
 
+This vignette documents the `Hierarchical Density-Based Spatial Clustering of Applications with Noise (HDBSCAN)` of this IPMS data
+
 ```{r reset-shiny-mode, include=FALSE}
 options(htmlwidgets.shinyMode = FALSE)
 ```
@@ -355,10 +357,9 @@ protein_cluster_df <- clusters_df |>
   dplyr::relocate(cluster_class, .after = cluster) |> 
   dplyr::arrange(desc(protein_hSAINT_score), Protein) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::mutate(cluster_clean_n = sum(protein_contam_flag), .after = cluster_size) |> 
+  dplyr::mutate(cluster_clean_n = sum(protein_contam_flag == 0), .after = cluster_size) |> 
   dplyr::mutate(cluster_clean_fraction = round((cluster_clean_n/cluster_size)*100, 2), .after = cluster_clean_n) |> 
   dplyr::ungroup()
-
 head(protein_cluster_df)
 ```
 
@@ -461,10 +462,7 @@ progressr::with_progress({
           dplyr::inner_join(EntrezIDs |> 
                               dplyr::rename(Protein = 1)) |> # get ENTREZID's
           dplyr::inner_join(protein_cluster_df |> 
-                                dplyr::filter((cluster_median_hSAINT_score > 0.5 &
-                                                 cluster_clean_fraction < 5 &
-                                                 protein_contam_flag < 2 ) |
-                                                protein_contam_flag == 0) |> 
+                                dplyr::filter(protein_contam_flag == 0) |> 
                               dplyr::distinct(Protein)) |> # filter out any proteins ID'd in literature or in > 5% of CRAPome studies as contaminants
           
           dplyr::distinct(ENTREZID) |>
@@ -674,10 +672,7 @@ subcluster_enrichment_df <- progressr::with_progress({
         ) |>
         dplyr::inner_join(
           protein_cluster_df |> 
-            dplyr::filter((cluster_median_hSAINT_score > 0.5 &
-                             cluster_clean_fraction < 5 &
-                             protein_contam_flag < 2 ) |
-                            protein_contam_flag == 0),
+            dplyr::filter(protein_contam_flag == 0),
           by = "Protein"
         ) |>
         dplyr::distinct(ENTREZID) |>

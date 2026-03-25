@@ -22,3 +22,6 @@ where = ["."]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 env = { MPLBACKEND = "Agg" }
+
+[tool.setuptools.exclude-package-data]
+"*" = ["coherence.md"]

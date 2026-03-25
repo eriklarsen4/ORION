@@ -23,6 +23,7 @@
 ^\.gitattributes$
 ^\.gitmodules$
 ^coherence_internal\.md$
+^coherence\.md4
 
 # Python package and related files
 ^python/

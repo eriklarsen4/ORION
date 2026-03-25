@@ -285,15 +285,38 @@ protein_cluster_df <- clusters_df |>
     cluster_scores |> 
       dplyr::ungroup()
   ) |> 
-  dplyr::rename_with(.cols = c(hSAINT_score:CRAPome_flag), ~paste0("protein_", .x)) |> 
-  dplyr::mutate(protein_contam_flag = protein_lit_flag + protein_CRAPome_flag, .after = protein_hSAINT_score) %>%
   dplyr::mutate(dplyr::across(c(dplyr::where(is.double)), ~ round(.x, 3))) |> 
+  dplyr::mutate(
+    cluster_class = dplyr::case_when(
+      cluster_median_hSAINT_score > 0.5 &
+        cluster_contam_perc > 
+        cluster_scores |> 
+        dplyr::pull(cluster_contam_perc) |> 
+        stats::median() ~ 'High hSAINT, High Contamination',
+      cluster_median_hSAINT_score > 0.5 &
+        cluster_contam_perc <
+        cluster_scores |> 
+        dplyr::pull(cluster_contam_perc) |> 
+        stats::median() ~ 'High hSAINT, Low Contamination',
+      cluster_median_hSAINT_score < 0.5 &
+        cluster_contam_perc > 
+        cluster_scores |> 
+        dplyr::pull(cluster_contam_perc) |> 
+        stats::median() ~ 'Low hSAINT, High Contamination',
+      cluster_median_hSAINT_score < 0.5 &
+        cluster_contam_perc <
+        cluster_scores |> 
+        dplyr::pull(cluster_contam_perc) |> 
+        stats::median() ~ 'Low hSAINT, Low Contamination'
+    )) |> 
   dplyr::relocate(cluster_class, .after = cluster) |> 
   dplyr::arrange(desc(protein_hSAINT_score), Protein) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::mutate(cluster_clean_n = sum(protein_contam_flag), .after = cluster_n) |> 
-  dplyr::mutate(cluster_clean_fraction = round((cluster_clean_n/cluster_n)*100, 2), .after = cluster_clean_n) |> 
+  dplyr::mutate(cluster_clean_n = sum(protein_contam_flag == 0), .after = cluster_size) |> 
+  dplyr::mutate(cluster_clean_fraction = round((cluster_clean_n/cluster_size)*100, 2), .after = cluster_clean_n) |> 
   dplyr::ungroup()
+
+head(protein_cluster_df)
 ```
 
 ## Cluster GO GSEA
@@ -394,10 +417,7 @@ progressr::with_progress({
           dplyr::inner_join(EntrezIDs |> 
                               dplyr::rename(Protein = 1)) |> # get EntrezIDs
           dplyr::inner_join(protein_cluster_df |> 
-                              dplyr::filter((cluster_median_hSAINT_score > 0.5 &
-                                               cluster_clean_fraction < 5 &
-                                               protein_contam_flag < 2 ) |
-                                              protein_contam_flag == 0) |>
+                              dplyr::filter(protein_contam_flag == 0) |>
                               dplyr::distinct(Protein)) |> 
           dplyr::distinct(ENTREZID) |> 
           dplyr::pull()
@@ -608,9 +628,7 @@ progressr::with_progress({
         ) |>
         dplyr::inner_join(
           protein_cluster_df |>
-            dplyr::filter((cluster_median_hSAINT_score > 0.5 &
-                             protein_contam_flag < 2) | 
-                            protein_contam_flag == 0) |>
+            dplyr::filter(protein_contam_flag == 0) |>
             dplyr::distinct(Protein),
           by = "Protein"
         ) |>
@@ -783,7 +801,6 @@ global_enrichment_results_df |>
                                    TRUE ~ 'Not Enriched')
     ) |> 
   dplyr::group_by(cluster) |>  
-  dplyr::slice_head(n = 3) |>
   dplyr::arrange(p.adjust) |>
   ggplot2::ggplot(
     ggplot2::aes(
@@ -819,6 +836,7 @@ global_enrichment_results_df |>
                   color = ggplot2::guide_legend(override.aes = list(size = 4,
                                                                     shape = 19,
                                                                     color = c('navy',
+                                                                              'darkgoldenrod2',
                                                                               'firebrick'))),
                   alpha = ggplot2::guide_legend(override.aes = list(size = 5,
                                                                     shape = 19)),
@@ -826,8 +844,10 @@ global_enrichment_results_df |>
                   # size = 'none'
                   ) +
   ggplot2::scale_color_manual(values = c('navy',
+                                         'darkgoldenrod2',
                                         'firebrick')) +
   ggplot2::scale_fill_manual(values = c('navy',
+                                        'darkgoldenrod2',
                                         'firebrick'))
 ```
 
