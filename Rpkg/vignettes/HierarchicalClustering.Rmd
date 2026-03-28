@@ -83,21 +83,132 @@ options(stringsAsFactors = FALSE)
 load("../../analysis/R/precompute_objects.rda")
 ```
 
+```{r Create the Mean Shift Function to Characterize hSAINT scores}
+mean_shift_valley <- function(gamma_vec) {
+
+  # kernel density estimate on [0,1]
+  d <- stats::density(gamma_vec, from = 0, to = 1)
+
+  # tibble with density and neighbors for derivative and mode detection
+  df <- tibble::tibble(
+    x       = d$x,
+    f       = d$y,
+    f_lag   = dplyr::lag(d$y),      # f[i-1]
+    f_lead  = dplyr::lead(d$y)      # f[i+1]
+  )
+
+  # discrete derivative of the density (forward difference)
+  # slope[i] approximates f'(x[i])
+  df <- df %>%
+    dplyr::mutate(
+      slope = f_lead - f
+    )
+
+  # indices where both neighbors exist (needed for local maxima)
+  df <- df %>%
+    dplyr::mutate(
+      interior = !is.na(f_lag) & !is.na(f_lead)
+    )
+
+  # local maxima (aka modes) satisfy f > f_lag and f > f_lead
+  df <- df %>%
+    dplyr::mutate(
+      is_mode = interior & f > f_lag & f > f_lead
+    )
+
+  # extract mode indices
+  mode_idx <- which(df$is_mode)
+
+  # assume two modes: left (noise) and right (signal)
+  left_mode  <- mode_idx[1]
+  right_mode <- mode_idx[length(mode_idx)]
+
+  # mean-shift basin assignment:
+  # each grid point moves uphill following the sign of the slope
+  basin_target <- integer(nrow(df))
+
+  for (i in seq_len(nrow(df))) {
+    j <- i
+    # move right while slope is positive
+    while (j < nrow(df) && df$slope[j] > 0) {
+      j <- j + 1
+    }
+    # move left while slope is negative
+    while (j > 1 && df$slope[j - 1] < 0) {
+      j <- j - 1
+    }
+    basin_target[i] <- j
+  }
+
+  # classify each point by which mode it's closer to
+  left_dist  <- abs(basin_target - left_mode)
+  right_dist <- abs(basin_target - right_mode)
+
+  class_label <- ifelse(left_dist < right_dist, 1L, 2L)
+
+  # valley boundary is the last index classified as left
+  boundary_idx <- max(which(class_label == 1L))
+
+  # valley location (single point)
+  c <- df$x[boundary_idx]
+
+  # expand valley asymmetrically using slope magnitude
+  # threshold is relative to max slope magnitude
+  eps <- 0.01 * max(abs(df$slope), na.rm = TRUE)
+
+  left_idx <- boundary_idx
+  while (left_idx > 1 && abs(df$slope[left_idx - 1]) < eps) {
+    left_idx <- left_idx - 1
+  }
+
+  right_idx <- boundary_idx
+  while (right_idx < nrow(df) && abs(df$slope[right_idx]) < eps) {
+    right_idx <- right_idx + 1
+  }
+
+  c1 <- df$x[left_idx]
+  c2 <- df$x[right_idx]
+
+  c(c1, c2)
+}
+```
+
+```{r Apply the Mean Shift}
+hSAINT <- hSAINT |> 
+  dplyr::mutate(
+    hSAINT_class = {
+      cutpoints <- mean_shift_valley(score) # find the indeces of the class modes bounding the valley between them
+      dplyr::case_when(
+        score < cutpoints[1] ~ 'Low hSAINT', # assign classes based on post. prob
+        score <= cutpoints[2] ~ 'Medium hSAINT',
+        score > cutpoints[2] ~ 'High hSAINT'
+      )
+    },
+    contam_flag = lit_flag + CRAPome_flag,
+    
+    # assign contamination class based on frequency across shared studies and id in lit
+    contam_class = dplyr::case_when(contam_flag == 0 ~ 
+                                              'Low Contamination',
+                                            contam_flag == 1 ~ 
+                                              'Medium Contamination',
+                                            contam_flag == 2 ~ 
+                                              'High Contamination'),
+    
+    stat_class = paste(hSAINT_class,
+                               contam_class, sep = ', ')
+  ) |> # assign the orthogonal statistical model-based classes
+  
+  dplyr::rename(hSAINT_score = score) |> 
+  dplyr::relocate(contam_flag, .after = hSAINT_score) |> 
+  dplyr::select(-hSAINT_class, -contam_class) |> 
+  dplyr::rename_with(.cols = c(!dplyr::contains('Protein')), ~paste0('protein_', .x))
+
+head(hSAINT)
+```
+
+
 ```{r Second Data Load, echo = FALSE}
 rm(IPMS_mat_log)
-hSAINT <- hSAINT |> 
-  dplyr::mutate(protein_stat_class = dplyr::case_when(score > 0.5 & 
-                                                lit_flag + CRAPome_flag < 1 ~ 'High hSAINT, Low Contamination',
-                                              score < 0.5 &
-                                                lit_flag + CRAPome_flag < 1 ~ 'Low hSAINT, Low Contamination',
-                                              score > 0.5 &
-                                                lit_flag + CRAPome_flag > 0 ~ 'High hSAINT, High Contamination',
-                                              score < 0.5 &
-                                                lit_flag + CRAPome_flag > 0 ~ 'Low hSAINT, High Contamination'),
-                contam_flag = lit_flag + CRAPome_flag) |> 
-  dplyr::rename(protein_hSAINT_score = score) |> 
-  dplyr::rename_with(.cols = c(dplyr::contains("flag")), ~paste0('protein_', .x)) |> 
-  dplyr::relocate(protein_contam_flag, .after = protein_hSAINT_score)
 ```
 
 
@@ -248,7 +359,8 @@ rm(list = ls(pattern = '_mat'))
 
 ## Join Clusters to hSAINT
 
-Include score summaries (mean and median posterior probability scores, ranks, and literature or CRAPome contamination rate)
+Include score summaries (mean and median posterior probability scores, ranks, 
+and literature or CRAPome contamination rate)
 
 ```{r Summarize SAINT Scores and Contamination Rates}
 cluster_scores <- clusters_df |>  
@@ -257,13 +369,16 @@ cluster_scores <- clusters_df |>
   ) |> 
   dplyr::arrange(desc(protein_hSAINT_score)) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::summarize(cluster_mean_hSAINT_score = mean(protein_hSAINT_score),
-                   cluster_median_hSAINT_score = stats::median(protein_hSAINT_score),
-                   cluster_hSAINT_score_mass = sum(protein_hSAINT_score),
-                   cluster_size = dplyr::n(),
-                   cluster_lit_flag_perc = (sum(protein_lit_flag)/cluster_size)*100,
-                   cluster_CRAPome_flag_perc = (sum(protein_CRAPome_flag)/cluster_size)*100,
-                   cluster_contam_perc = cluster_lit_flag_perc + cluster_CRAPome_flag_perc) |> 
+  dplyr::summarize(
+    # compute summary metrics
+    cluster_mean_hSAINT_score = mean(protein_hSAINT_score),
+    cluster_median_hSAINT_score = stats::median(protein_hSAINT_score),
+    cluster_hSAINT_score_mass = sum(protein_hSAINT_score),
+    cluster_size = dplyr::n(),
+    cluster_lit_flag_perc = (sum(protein_lit_flag)/cluster_size)*100,
+    cluster_CRAPome_flag_perc = (sum(protein_CRAPome_flag)/cluster_size)*100,
+    cluster_contam_perc = cluster_lit_flag_perc + cluster_CRAPome_flag_perc) |> 
+  
   dplyr::arrange(desc(cluster_mean_hSAINT_score), cluster_contam_perc) |> 
   dplyr::mutate(cluster_mean_rank = dplyr::row_number()) |> 
   dplyr::arrange(desc(cluster_median_hSAINT_score), cluster_contam_perc) |> 
@@ -271,12 +386,112 @@ cluster_scores <- clusters_df |>
   dplyr::arrange(desc(cluster_hSAINT_score_mass), cluster_contam_perc) |> 
   dplyr::mutate(cluster_total_rank = dplyr::row_number()) |> 
   dplyr::arrange(cluster_mean_rank) |> 
-  dplyr::relocate(c(cluster_lit_flag_perc, cluster_CRAPome_flag_perc), .after = cluster_total_rank)
+  dplyr::relocate(c(cluster_lit_flag_perc,
+                    cluster_CRAPome_flag_perc), .after = cluster_total_rank) |> 
+  # apply mean shift function for classification; contamination is not bi-modal
+  dplyr::mutate(
+    cluster_hSAINT_class = {
+      cutpoints <- mean_shift_valley(cluster_median_hSAINT_score) # find the indeces of the class modes
+      dplyr::case_when(
+        cluster_median_hSAINT_score < cutpoints[1] ~ 'Low hSAINT', # assign classes based on post. prob
+        cluster_median_hSAINT_score <= cutpoints[2] ~ 'Medium hSAINT',
+        cluster_median_hSAINT_score > cutpoints[2] ~ 'High hSAINT'
+      )
+    },
+    cluster_contam_class = dplyr::case_when(
+      cluster_contam_perc <= stats::quantile(
+        cluster_contam_perc, 0.60) ~ "Low Contamination",
+      cluster_contam_perc <= stats::quantile(
+        cluster_contam_perc, 0.95) ~ "Medium Contamination",
+      TRUE ~ "High Contamination"
+    ),
+
+
+    
+    cluster_class = paste(cluster_hSAINT_class,
+                          cluster_contam_class, sep = ', ') 
+  ) |> 
+  dplyr::select(-cluster_hSAINT_class, -cluster_contam_class) |> 
+  dplyr::relocate(cluster_class, .after = cluster)
+
+cluster_scores
+```
+
+```{r ClusterMetricDistributions, fig.height=8}
+# extract the cluster median hSAINT score distribution class indeces
+hSAINT_cuts <- mean_shift_valley(cluster_scores$cluster_median_hSAINT_score)
+
+cowplot::plot_grid(
+  cluster_scores |> 
+    dplyr::group_by(cluster) |> 
+    ggplot2::ggplot(ggplot2::aes(x = cluster_median_hSAINT_score)) +
+    ggplot2::geom_density() +
+    ggplot2::geom_rug() +
+    ggplot2::theme_bw() +
+    ggplot2::labs(title = 'Distribution of hClust Cluster Median hSAINT Scores',
+                  x = 'Cluster Median hSAINT Score',
+                  y = 'Density') +
+    ggplot2::geom_vline(
+      xintercept = hSAINT_cuts,
+      linetype = 'dashed',
+      color = 'firebrick'
+    ) + ggplot2::annotate(
+    "text",
+    x = hSAINT_cuts[1] / 2,
+    y = Inf, vjust = 1.5,
+    label = "Low", color = "gray30"
+  ) +
+  ggplot2::annotate(
+    "text",
+    x = mean(hSAINT_cuts),
+    y = Inf, vjust = 1.5,
+    label = "Medium", color = "gray30"
+  ) +
+  ggplot2::annotate(
+    "text",
+    x = (hSAINT_cuts[2] + max(cluster_scores$cluster_median_hSAINT_score)) / 2,
+    y = Inf, vjust = 1.5,
+    label = "High", color = "gray30"
+  ),
+  
+  cluster_scores |> 
+    dplyr::group_by(cluster) |> 
+    ggplot2::ggplot(ggplot2::aes(x = cluster_contam_perc)) +
+    ggplot2::geom_density() +
+    ggplot2::geom_rug() +
+    ggplot2::theme_bw() +
+    ggplot2::labs(title = 'Distribution of hClust Cluster Contamination Rates',
+                  x = 'Cluster Contamination Rates',
+                  y = 'Density') +
+    ggplot2::geom_vline(
+      xintercept = stats::quantile(cluster_scores |> 
+                                     dplyr::pull(cluster_contam_perc),
+                                   c(0.60, 0.95),
+                                   na.rm = T),
+      linetype = 'dashed',
+      color = 'firebrick'
+    )  + 
+  ggplot2::annotate("text",
+    x = stats::quantile(cluster_scores$cluster_contam_perc, 0.10),
+    y = Inf, vjust = 1.5, label = "Low", color = "gray30"
+  ) +
+  ggplot2::annotate("text",
+    x = stats::quantile(cluster_scores$cluster_contam_perc, 0.75),
+    y = Inf, vjust = 1.5, label = "Medium", color = "gray30"
+  ) +
+  ggplot2::annotate("text",
+    x = stats::quantile(cluster_scores$cluster_contam_perc, 0.97),
+    y = Inf, vjust = 1.5, label = "High", color = "gray30"
+  ),
+  
+  nrow = 1
+)
 ```
 
 Join the cluster scores to the cluster (per protein) dataframe and the `hSAINT` results for classification
 
 ```{r Join the Summary dataframe to the Protein Level dataframes}
+
 protein_cluster_df <- clusters_df |> 
   dplyr::inner_join(
     hSAINT
@@ -286,39 +501,52 @@ protein_cluster_df <- clusters_df |>
       dplyr::ungroup()
   ) |> 
   dplyr::mutate(dplyr::across(c(dplyr::where(is.double)), ~ round(.x, 3))) |> 
-  dplyr::mutate(
-    cluster_class = dplyr::case_when(
-      cluster_median_hSAINT_score > 0.5 &
-        cluster_contam_perc > 
-        cluster_scores |> 
-        dplyr::pull(cluster_contam_perc) |> 
-        stats::median() ~ 'High hSAINT, High Contamination',
-      cluster_median_hSAINT_score > 0.5 &
-        cluster_contam_perc <
-        cluster_scores |> 
-        dplyr::pull(cluster_contam_perc) |> 
-        stats::median() ~ 'High hSAINT, Low Contamination',
-      cluster_median_hSAINT_score < 0.5 &
-        cluster_contam_perc > 
-        cluster_scores |> 
-        dplyr::pull(cluster_contam_perc) |> 
-        stats::median() ~ 'Low hSAINT, High Contamination',
-      cluster_median_hSAINT_score < 0.5 &
-        cluster_contam_perc <
-        cluster_scores |> 
-        dplyr::pull(cluster_contam_perc) |> 
-        stats::median() ~ 'Low hSAINT, Low Contamination'
-    )) |> 
   dplyr::relocate(cluster_class, .after = cluster) |> 
   dplyr::arrange(desc(protein_hSAINT_score), Protein) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::mutate(cluster_clean_n = sum(protein_contam_flag == 0), .after = cluster_size) |> 
-  dplyr::mutate(cluster_clean_fraction = round((cluster_clean_n/cluster_size)*100, 2), .after = cluster_clean_n) |> 
   dplyr::ungroup()
 
 head(protein_cluster_df)
 ```
 
+
+## Cluster Classification Rationale
+
+
+`Cluster median hSAINT scores`
+
+  + Scores exhibit a weak bimodal distribution
+  
+  + Applying 1‑D mean‑shift to the empirical density identifies a valley between 
+  **0.436** and **0.454**, the x-coordinates of the local minimum of the 
+  estimated density function
+  
+  + We use this valley to define cluster-level hSAINT classes consistent with 
+  the mode-based classification used at the protein level (**Low**, **Mid** 
+  medium), **High**)
+  
+`Cluster contamination rates`
+
+  + Also unimodal and right‑skewed, but with an extreme outlier
+  
+  + Although the kernel density estimate shows a small secondary bump, this 
+  feature is driven the outlier and does *not* represent a true mode
+  
+    + Consistent with this, **mean-shift** valley detection fails to identify a 
+    density minimum, confirming that the distribution contains no data-derived 
+    boundaries
+    
+  + To avoid imposing arbitrary boundaries for a consistent, three-tier 
+  classification paradigm, we classify contamination by isolating the extreme 
+  upper tail
+  
+    + Clusters in the bottom **60%** of contamination rates = **Low**
+    + Clusters between **60th and 95th percentiles** = **Mid** (medium)
+    + Clusters > 95% percentile = **High**
+    
+    + This approach separates the clean majority, the moderate tail, and the 
+    extreme outlier without fabricating structure not present in the data
+    
 ## Cluster GO GSEA
 
 ```{r Downstream Analysis}
@@ -487,9 +715,6 @@ global_enrichment_results_df <- purrr::map_dfr(
   dplyr::select(-id) |>
   dplyr::full_join(
     cluster_scores
-  ) |>
-  dplyr::inner_join(
-    protein_cluster_df |> dplyr::distinct(cluster, cluster_class)
   ) |>
   dplyr::group_by(cluster) |>
   dplyr::arrange(cluster_contam_perc, desc(cluster_mean_hSAINT_score), p.adjust) |>
@@ -691,10 +916,6 @@ subcluster_enrichment_results_df <- subcluster_enrichment %>%
   dplyr::full_join(
     cluster_scores
   ) |>
-  dplyr::inner_join(
-    protein_cluster_df |> 
-      dplyr::distinct(cluster, cluster_class)
-  ) |> 
   dplyr::group_by(cluster) |> 
   dplyr::arrange(cluster_contam_perc, desc(cluster_median_hSAINT_score), p.adjust) |> 
   dplyr::filter(!is.na(GO_Category)) |> 
@@ -1089,9 +1310,9 @@ the mass spectrometer.
 
 Subclusters within **cluster 12** are not enriched 
 
-### High hSAINT Score, Low Contamination Cluster Heatmap (Signal)
+### High hSAINT Score, Low Contamination Cluster Heatmap (Clear Signal)
 
-```{r RawZHeatmapSAINTSignalCluster, render = T}
+```{r RawZHeatmaphSAINTSignalCluster, render = T}
 pheatmap::pheatmap(
   IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
                    dplyr::filter(Protein == 'TMEM184B' |
@@ -1112,7 +1333,7 @@ pheatmap::pheatmap(
         c(protein_cluster_df |> 
             dplyr::filter(Protein == 'TMEM184B' |
                             grepl(cluster_class,
-                                  pattern = 'High SAINT, Low')) |> 
+                                  pattern = 'High hSAINT, Low')) |> 
             dplyr::pull(Protein)
           )
       ]
@@ -1127,9 +1348,45 @@ pheatmap::pheatmap(
 )
 ```
 
+### High hSAINT Score, Medium Contamination Cluster Heatmap
+
+```{r RawZHeatmapHighhSAINTMedContamClusters, render = T}
+pheatmap::pheatmap(
+  IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
+                   dplyr::filter(grepl(cluster_class,
+                                         pattern = 'High hSAINT, Med')) |> 
+                   dplyr::pull(Protein)),],
+  color = grDevices::colorRampPalette(c('navy',
+                                        'white',
+                                        'darkgoldenrod'))((200)),
+  cluster_rows = T,
+  cluster_cols = F,
+  show_rownames = F,
+  annotation_row = data.frame(
+    
+    cluster = clusters_opt[
+      names(clusters_opt) %in% 
+        
+        c(protein_cluster_df |> 
+            dplyr::filter(grepl(cluster_class,
+                                  pattern = 'High hSAINT, Med')) |> 
+            dplyr::pull(Protein)
+          )
+      ]
+    ),
+  
+  annotation_colors = list(cluster = c('firebrick', 'navy')),
+  angle_col = 90,
+  use_raster = F,
+  border_color = NA,
+  cutree_rows = 2,
+  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, High hSAINT Score, Medium Contamination Clusters'
+)
+```
+
 ### High hSAINT Score, High Contamination Clusters Heatmap (Sticky/Noise)
 
-```{r RawZHeatmapSAINTHighHighClusters, render = T}
+```{r RawZHeatmapHighhSAINTHighContamClusters, render = T}
 pheatmap::pheatmap(
   IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
                    dplyr::filter(Protein == 'TMEM184B' |
@@ -1164,17 +1421,16 @@ pheatmap::pheatmap(
   use_raster = F,
   border_color = NA,
   cutree_rows = 2,
-  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, High SAINT Score, High Contamination Clusters'
+  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, High hSAINT Score, High Contamination Clusters'
 )
 ```
 
 ### Low hSAINT Score, Low Contamination Clusters Heatmap (Low Abundance)
 
-```{r RawZHeatmapSAINTLowLowClusters, render = T}
+```{r RawZHeatmapLowhSAINTLowContamClusters, render = T}
 pheatmap::pheatmap(
   IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
-                   dplyr::filter(Protein == 'TMEM184B' |
-                                   grepl(cluster_class,
+                   dplyr::filter(grepl(cluster_class,
                                          pattern = 'Low hSAINT, Low')) |> 
                    dplyr::pull(Protein)),],
   color = grDevices::colorRampPalette(c('navy',
@@ -1200,8 +1456,7 @@ pheatmap::pheatmap(
   annotation_colors = list(cluster = annotation_colors[[1]][
     clusters_opt[
       names(clusters_opt) %in% c(protein_cluster_df |> 
-                   dplyr::filter(Protein == 'TMEM184B' |
-                                   grepl(cluster_class,
+                   dplyr::filter(grepl(cluster_class,
                                          pattern = 'Low hSAINT, Low')) |> 
                    dplyr::pull(Protein))
     ] |> as.numeric() |> unique()
@@ -1209,18 +1464,17 @@ pheatmap::pheatmap(
   angle_col = 90,
   use_raster = F,
   border_color = NA,
-  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, Low hSAINT Score, Low Contamination Cluster'
+  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, Low hSAINT Score, Low Contamination Clusters'
 )
 ```
 
-### Low hSAINT Score, High Contamination Clusters Heatmap (Background)
+### Low hSAINT Score, Medium Contamination Clusters Heatmap
 
-```{r RawZHeatmapSAINTContamClusters, render = T}
+```{r RawZHeatmapLowhSAINTMedContamClusters, render = T}
 pheatmap::pheatmap(
   IPMS_z_ordered[rownames(IPMS_z_ordered) %in% c(protein_cluster_df |> 
-                   dplyr::filter(Protein == 'TMEM184B' |
-                                   grepl(cluster_class,
-                                         pattern = 'Low hSAINT, High')) |> 
+                   dplyr::filter(grepl(cluster_class,
+                                         pattern = 'Low hSAINT, Med')) |> 
                    dplyr::pull(Protein)),],
   color = grDevices::colorRampPalette(c('navy',
                                         'white',
@@ -1234,29 +1488,22 @@ pheatmap::pheatmap(
       names(clusters_opt) %in% 
         
         c(protein_cluster_df |> 
-            dplyr::filter(Protein == 'TMEM184B' |
-                            grepl(cluster_class,
-                                  pattern = 'Low hSAINT, High')) |> 
+            dplyr::filter(grepl(cluster_class,
+                                  pattern = 'Low hSAINT, Med')) |> 
             dplyr::pull(Protein)
           )
       ]
     ),
   
-  annotation_colors = list(cluster = annotation_colors[[1]][
-    clusters_opt[
-      names(clusters_opt) %in% c(protein_cluster_df |> 
-                   dplyr::filter(Protein == 'TMEM184B' |
-                                   grepl(cluster_class,
-                                         pattern = 'Low hSAINT, High')) |> 
-                   dplyr::pull(Protein))
-    ] |> as.numeric() |> unique()
-  ]),
+  annotation_colors = list(cluster = c('firebrick', 'navy')),
   angle_col = 90,
   use_raster = F,
   border_color = NA,
-  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, Low hSAINT Score, High Contamination Cluster'
+  cutree_rows = 4,
+  main = 'Hierarchically-Clustered TMEM184B IPMS TSCs\nZ-scored, Low hSAINT Score, Medium Contamination Clusters'
 )
 ```
+
 
 ```{r, results='asis', echo=FALSE}
 fmt <- knitr::pandoc_to()
@@ -1274,17 +1521,18 @@ if (identical(fmt, "html")) {
 options(htmlwidgets.shinyMode = TRUE)
 ```
 
+
+
+
 ## Clustering Results Table by Protein (Cluster 1, first 3000 rows)
 
 ```{r Print Protein Level Results Table}
 DT::datatable(
   protein_cluster_df |> 
     dplyr::full_join(global_enrichment_results_df |> 
-                       dplyr::select(-c(cluster_mean_hSAINT_score:cluster_total_rank))) |> 
+                       dplyr::select(-c(cluster_mean_hSAINT_score:cluster_CRAPome_flag_perc))) |> 
     dplyr::full_join(subcluster_enrichment_results_df |> 
-                       dplyr::select(-c(cluster_mean_hSAINT_score:cluster_total_rank))) |> 
-    dplyr::rename_with(.cols = c(dplyr::contains("rank")), 
-                                 ~paste0("cluster_", .x)) |> 
+                       dplyr::select(-c(cluster_mean_hSAINT_score:cluster_CRAPome_flag_perc))) |> 
     dplyr::filter(!is.na(GO_Term)) |> 
     dplyr::filter(!is.na(GO_Category)) |> 
     dplyr::distinct() |> 
@@ -1303,9 +1551,10 @@ This (complete) table exists as [hClust_protein_level_GO_GSEA.rda](../../analysi
 ```{r Print Cluster Level Results Table}
 DT::datatable(
   global_enrichment_results_df |> 
-  dplyr::full_join(subcluster_enrichment_results_df) |> 
-  dplyr::full_join(cluster_scores) |>
-  dplyr::arrange(p.adjust, FoldEnrichment)
+    dplyr::full_join(subcluster_enrichment_results_df) |> 
+    dplyr::full_join(cluster_scores) |>
+    dplyr::arrange(p.adjust, FoldEnrichment) |> 
+    dplyr::filter(!is.na(GO_Term))
 )
 ```
 
