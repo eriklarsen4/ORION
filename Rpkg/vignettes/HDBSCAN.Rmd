@@ -29,6 +29,59 @@ endolysosomal paper under revision (2025-02-28) for the Journal of Cell Science
 
 This vignette documents the `Hierarchical Density-Based Spatial Clustering of Applications with Noise (HDBSCAN)` of this IPMS data
 
++ The goal is to cluster protein-protein interaction candidates and assess the 
+clustering
+
++ In the event that the clustering is uninformative, we also classify proteins by 
+their `hierarchical SAINT posterior probability` (score, hereafter `hSAINT score`)--
+their **signal strength** according to the hierarchical latent mixture model results
+
+
++ We do this according to the density of all `hSAINT` scores
+
+  + The density is clearly bi-modal with separation at the extremes, thus there 
+  are three categories:
+
+    + **Low** = proteins with `hSAINT score`s within the density mode at the low 
+    extreme
+    
+    + **High** = proteins with `hSAINT score`s within the density mode at the 
+    high extreme
+    
+    + **Medium** = proteins with `hSAINT score`s in the "valley" between the modes
+    
+      + We empirically determine the "valley" using **mean shift**
+    
+    
++ The other dimension by which we classify proteins is **contamination**:
+
+  + Proteins identified in literature as contamination are given a **1** (not is **0**)
+  
+  + Proteins identified in the CRAPome repository in more than **5%** of 
+  studies are given a **1**
+  
+    + **Low Contamination** Proteins = **0** in both literature and CRAPome
+    
+    + **Medium Contamination** Proteins = **1** in either literature or CRAPome
+    
+    + **High Contamination** Proteins = **1** in both literature and CRAPome
+    
++ We apply the same empirical binning strategy at the cluster level for 
+`hSAINT score`s, since the distribution of cluster median `hSAINT` scores is also
+bi-modal with a middle plateau
+
+  + Because we lose protein-level resolution, we compute contamination rates 
+  (frequency of any protein with at least one contamination flag) and apply 
+  binning by tertiles, identifying an extreme outlier among a unimodal distribution
+  of rates
+  
+  + Thus, this clustering strategy allows comparison to other clustering strategies,
+  and complementation/external validity to `hSAINT scores` at the protein- and 
+  cluster-level
+  
+    + Every protein will have an `hSAINT score`, cluster assignment, contamination rate,
+    classification, and cluster classification
+
 ```{r reset-shiny-mode, include=FALSE}
 options(htmlwidgets.shinyMode = FALSE)
 ```
@@ -78,34 +131,143 @@ options(stringsAsFactors = FALSE)
 
 ## Load the Pre-Computed Data
 
-Classify each protein into a quadrant based on its `hSAINT` score ( **> 0.5** = **High hSAINT**) and aggregate number of `contamination flags` 
-(e.g. `identified in literature` as contaminant or `identified in > 5% CRAPome` studies = **high contamination**, otherwise, **low**)
++ Classify each protein into a matrix based on its `hSAINT` score and number of 
+contamination flags (**0**, **1**, **2**)
 
 ```{r Data Load}
 # Load precomputed objects from preprocessing
 load("../../analysis/R/precompute_objects.rda")
 ```
 
-```{r Second precompute Data Load, echo = FALSE}
-rm(IMPS_mat_log)
-rm(IPMS_mat_Z)
+### Mean Shift Function
+
+```{r Create the Mean Shift Function to Characterize hSAINT scores}
+mean_shift_valley <- function(gamma_vec) {
+
+  # kernel density estimate on [0,1]
+  d <- stats::density(gamma_vec, from = 0, to = 1)
+
+  # tibble with density and neighbors for derivative and mode detection
+  df <- tibble::tibble(
+    x       = d$x,
+    f       = d$y,
+    f_lag   = dplyr::lag(d$y),      # f[i-1]
+    f_lead  = dplyr::lead(d$y)      # f[i+1]
+  )
+
+  # discrete derivative of the density (forward difference)
+  # slope[i] approximates f'(x[i])
+  df <- df %>%
+    dplyr::mutate(
+      slope = f_lead - f
+    )
+
+  # indices where both neighbors exist (needed for local maxima)
+  df <- df %>%
+    dplyr::mutate(
+      interior = !is.na(f_lag) & !is.na(f_lead)
+    )
+
+  # local maxima (aka modes) satisfy f > f_lag and f > f_lead
+  df <- df %>%
+    dplyr::mutate(
+      is_mode = interior & f > f_lag & f > f_lead
+    )
+
+  # extract mode indices
+  mode_idx <- which(df$is_mode)
+
+  # assume two modes: left (noise) and right (signal)
+  left_mode  <- mode_idx[1]
+  right_mode <- mode_idx[length(mode_idx)]
+
+  # mean-shift basin assignment:
+  # each grid point moves uphill following the sign of the slope
+  basin_target <- integer(nrow(df))
+
+  for (i in seq_len(nrow(df))) {
+    j <- i
+    # move right while slope is positive
+    while (j < nrow(df) && df$slope[j] > 0) {
+      j <- j + 1
+    }
+    # move left while slope is negative
+    while (j > 1 && df$slope[j - 1] < 0) {
+      j <- j - 1
+    }
+    basin_target[i] <- j
+  }
+
+  # classify each point by which mode it's closer to
+  left_dist  <- abs(basin_target - left_mode)
+  right_dist <- abs(basin_target - right_mode)
+
+  class_label <- ifelse(left_dist < right_dist, 1L, 2L)
+
+  # valley boundary is the last index classified as left
+  boundary_idx <- max(which(class_label == 1L))
+
+  # valley location (single point)
+  c <- df$x[boundary_idx]
+
+  # expand valley asymmetrically using slope magnitude
+  # threshold is relative to max slope magnitude
+  eps <- 0.01 * max(abs(df$slope), na.rm = TRUE)
+
+  left_idx <- boundary_idx
+  while (left_idx > 1 && abs(df$slope[left_idx - 1]) < eps) {
+    left_idx <- left_idx - 1
+  }
+
+  right_idx <- boundary_idx
+  while (right_idx < nrow(df) && abs(df$slope[right_idx]) < eps) {
+    right_idx <- right_idx + 1
+  }
+
+  c1 <- df$x[left_idx]
+  c2 <- df$x[right_idx]
+
+  c(c1, c2)
+}
 ```
 
-```{r Thid Data Load, echo = TRUE}
+```{r Apply the Mean Shift}
 hSAINT <- hSAINT |> 
-  dplyr::mutate(protein_stat_class = dplyr::case_when(score > 0.5 & 
-                                                lit_flag + CRAPome_flag < 1 ~ 'High hSAINT, Low Contamination',
-                                              score < 0.5 &
-                                                lit_flag + CRAPome_flag < 1 ~ 'Low hSAINT, Low Contamination',
-                                              score > 0.5 &
-                                                lit_flag + CRAPome_flag > 0 ~ 'High hSAINT, High Contamination',
-                                              score < 0.5 &
-                                                lit_flag + CRAPome_flag > 0 ~ 'Low hSAINT, High Contamination'),
-                contam_flag = lit_flag + CRAPome_flag) |> 
-  dplyr::rename(protein_hSAINT_score = score) |> 
-  dplyr::rename_with(.cols = c(dplyr::contains("flag")), ~paste0('protein_', .x)) |> 
-  dplyr::relocate(protein_contam_flag, .after = protein_hSAINT_score)
+  dplyr::mutate(
+    hSAINT_class = {
+      cutpoints <- mean_shift_valley(score) # find the indeces of the class modes bounding the valley between them
+      dplyr::case_when(
+        score < cutpoints[1] ~ 'Low hSAINT', # assign classes based on post. prob
+        score <= cutpoints[2] ~ 'Medium hSAINT',
+        score > cutpoints[2] ~ 'High hSAINT'
+      )
+    },
+    contam_flag = lit_flag + CRAPome_flag,
+    
+    # assign contamination class based on frequency across shared studies and id in lit
+    contam_class = dplyr::case_when(contam_flag == 0 ~ 
+                                              'Low Contamination',
+                                            contam_flag == 1 ~ 
+                                              'Medium Contamination',
+                                            contam_flag == 2 ~ 
+                                              'High Contamination'),
+    
+    stat_class = paste(hSAINT_class,
+                               contam_class, sep = ', ')
+  ) |> # assign the orthogonal statistical model-based classes
+  
+  dplyr::rename(hSAINT_score = score) |> 
+  dplyr::relocate(contam_flag, .after = hSAINT_score) |> 
+  dplyr::select(-hSAINT_class, -contam_class) |> 
+  dplyr::rename_with(.cols = c(!dplyr::contains('Protein')), ~paste0('protein_', .x))
+
+head(hSAINT)
 ```
+
+```{r Second Data Load, echo = FALSE}
+rm(IPMS_mat_log)
+```
+
 
 ```{r, results='asis', echo=FALSE}
 fmt <- knitr::pandoc_to()
@@ -141,13 +303,13 @@ if (identical(fmt, "html")) {
 
 ## Detect Clusters
 
-Pass the two-dimensional object through `HDBSCAN` to obtain clustering results
++ Pass the two-dimensional object through `HDBSCAN` to obtain clustering results
 
 + set `minPts` (minimum number of points required to form a dense region) to 
 default (**10**), which provides a stable balance between detecting 
 meaningful dense regions and avoiding fragmentation
 
-`HDBSCAN` will identify clusters from the 2-D object as regions of high point 
++ `HDBSCAN` will identify clusters from the 2-D object as regions of high point 
 density within the embedding
 
 ```{r Scan the PCA results}
@@ -188,7 +350,7 @@ if (identical(fmt, "html")) {
 }
 ```
 
-Plot the PCs
++ Plot the PCs
 
 ## PCA Plot
 
@@ -256,24 +418,26 @@ if (identical(fmt, "html")) {
 ```
 
 
-In order to assess this method and also to compare/validate the `hierarchical SAINT Poisson mixture model`, 
++ In order to assess this clustering method and to also compare/validate the `hierarchical SAINT Poisson mixture model`, 
 describing clusters based on the proteins within them is useful
 
-Similarly-localized proteins could be expected to have similar abundances to 
++ Similarly-localized proteins could be expected to have similar abundances to 
 each other as well as the target (**TMEM184B**)
 
-Similarly-functioning proteins could also be expected to have similar abundances 
++ Similarly-functioning proteins could also be expected to have similar abundances 
 to each other as well as the target
 
-Describing these clusters attained by `HDBSCAN` via gene ontology gene set 
++ Describing these clusters attained by `HDBSCAN` via gene ontology gene set 
 enrichment analysis is, therefore, useful and standard practice
 
-Furthermore, we may be able to assemble a `protein-protein interaction network`
++ Furthermore, we may be able to assemble a `protein-protein interaction network`
 from the results
 
-I outline this below-- the methods and results for acquiring these clusters, 
++ We outline this below-- the methods and results for acquiring these clusters, 
 their constituent proteins, and how we make sense of them-- visualized as
-`dotplots`, `heatmaps`, and a `network`. I include searchable tables printed last
+`dotplots`, `heatmaps`, and a `network`
+
++ We include searchable tables printed last
 
 ## Extract Clusters
 
@@ -289,9 +453,10 @@ rm(list = c('X', 'pca_results_df', 'pca'))
 head(clusters_df)
 ```
 
-## Join Clusters to hSAINT
+## Compute Cluster Summaries
 
-Include score summaries (mean and median posterior probability scores, ranks, and literature or CRAPome contamination rate)
++ Include score summaries (mean and median `hSAINT score`s, ranks, and 
+contamination rates)
 
 ```{r Summarize SAINT Scores and Contamination Rates}
 cluster_scores <- clusters_df |>  
@@ -300,13 +465,16 @@ cluster_scores <- clusters_df |>
   ) |> 
   dplyr::arrange(desc(protein_hSAINT_score)) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::summarize(cluster_mean_hSAINT_score = mean(protein_hSAINT_score),
-                   cluster_median_hSAINT_score = stats::median(protein_hSAINT_score),
-                   cluster_hSAINT_score_mass = sum(protein_hSAINT_score),
-                   cluster_size = dplyr::n(),
-                   cluster_lit_flag_perc = (sum(protein_lit_flag)/cluster_size)*100,
-                   cluster_CRAPome_flag_perc = (sum(protein_CRAPome_flag)/cluster_size)*100,
-                   cluster_contam_perc = cluster_lit_flag_perc + cluster_CRAPome_flag_perc) |> 
+  dplyr::summarize(
+    # compute summary metrics
+    cluster_mean_hSAINT_score = mean(protein_hSAINT_score),
+    cluster_median_hSAINT_score = stats::median(protein_hSAINT_score),
+    cluster_hSAINT_score_mass = sum(protein_hSAINT_score),
+    cluster_size = dplyr::n(),
+    cluster_lit_flag_perc = (sum(protein_lit_flag)/cluster_size)*100,
+    cluster_CRAPome_flag_perc = (sum(protein_CRAPome_flag)/cluster_size)*100,
+    cluster_contam_perc = cluster_lit_flag_perc + cluster_CRAPome_flag_perc) |> 
+  
   dplyr::arrange(desc(cluster_mean_hSAINT_score), cluster_contam_perc) |> 
   dplyr::mutate(cluster_mean_rank = dplyr::row_number()) |> 
   dplyr::arrange(desc(cluster_median_hSAINT_score), cluster_contam_perc) |> 
@@ -314,12 +482,116 @@ cluster_scores <- clusters_df |>
   dplyr::arrange(desc(cluster_hSAINT_score_mass), cluster_contam_perc) |> 
   dplyr::mutate(cluster_total_rank = dplyr::row_number()) |> 
   dplyr::arrange(cluster_mean_rank) |> 
-  dplyr::relocate(c(cluster_lit_flag_perc, cluster_CRAPome_flag_perc), .after = cluster_total_rank)
+  dplyr::relocate(c(cluster_lit_flag_perc,
+                    cluster_CRAPome_flag_perc), .after = cluster_total_rank) |> 
+  # apply mean shift function for classification; contamination is not bi-modal
+  dplyr::mutate(
+    cluster_hSAINT_class = {
+      cutpoints <- mean_shift_valley(cluster_median_hSAINT_score) # find the indeces of the class modes
+      dplyr::case_when(
+        cluster_median_hSAINT_score < cutpoints[1] ~ 'Low hSAINT', # assign classes based on post. prob
+        cluster_median_hSAINT_score <= cutpoints[2] ~ 'Medium hSAINT',
+        cluster_median_hSAINT_score > cutpoints[2] ~ 'High hSAINT'
+      )
+    },
+    cluster_contam_class = dplyr::case_when(
+      cluster_contam_perc <= stats::quantile(
+        cluster_contam_perc, 0.60) ~ "Low Contamination",
+      cluster_contam_perc <= stats::quantile(
+        cluster_contam_perc, 0.95) ~ "Medium Contamination",
+      TRUE ~ "High Contamination"
+    ),
+
+
+    
+    cluster_class = paste(cluster_hSAINT_class,
+                          cluster_contam_class, sep = ', ') 
+  ) |> 
+  dplyr::select(-cluster_hSAINT_class, -cluster_contam_class) |> 
+  dplyr::relocate(cluster_class, .after = cluster)
 
 head(cluster_scores)
 ```
 
-Join the cluster scores data to the cluster (per protein) dataframe and the `hSAINT` results for classification
+### Cluster Distributions of hSAINT and Contamination Scores
+
++ Plot the distributions of metrics describing clusters, independent of `GO Terms`
+
+```{r ClusterMetricDistributions, fig.height=8}
+# extract the cluster median hSAINT score distribution class indeces
+hSAINT_cuts <- mean_shift_valley(cluster_scores$cluster_median_hSAINT_score)
+
+cowplot::plot_grid(
+  cluster_scores |> 
+    dplyr::group_by(cluster) |> 
+    ggplot2::ggplot(ggplot2::aes(x = cluster_median_hSAINT_score)) +
+    ggplot2::geom_density() +
+    ggplot2::geom_rug() +
+    ggplot2::theme_bw() +
+    ggplot2::labs(title = 'Dist. of HDBSCAN Cluster Median hSAINT Scores',
+                  x = 'Cluster Median hSAINT Score',
+                  y = 'Density') +
+    ggplot2::geom_vline(
+      xintercept = hSAINT_cuts,
+      linetype = 'dashed',
+      color = 'firebrick'
+    ) + ggplot2::annotate(
+    "text",
+    x = hSAINT_cuts[1] / 2,
+    y = Inf, vjust = 1.5,
+    label = "Low", color = "gray30"
+  ) +
+  ggplot2::annotate(
+    "text",
+    x = mean(hSAINT_cuts),
+    y = Inf, vjust = 1.5,
+    label = "Medium", color = "gray30"
+  ) +
+  ggplot2::annotate(
+    "text",
+    x = (hSAINT_cuts[2] + max(cluster_scores$cluster_median_hSAINT_score)) / 2,
+    y = Inf, vjust = 1.5,
+    label = "High", color = "gray30"
+  ),
+  
+  cluster_scores |> 
+    dplyr::group_by(cluster) |> 
+    ggplot2::ggplot(ggplot2::aes(x = cluster_contam_perc)) +
+    ggplot2::geom_density() +
+    ggplot2::geom_rug() +
+    ggplot2::theme_bw() +
+    ggplot2::labs(title = 'Dist. of HDBSCAN Cluster Contamination Rates',
+                  x = 'Cluster Contamination Rates',
+                  y = 'Density') +
+    ggplot2::geom_vline(
+      xintercept = stats::quantile(cluster_scores |> 
+                                     dplyr::pull(cluster_contam_perc),
+                                   c(0.60, 0.95),
+                                   na.rm = T),
+      linetype = 'dashed',
+      color = 'firebrick'
+    )  + 
+  ggplot2::annotate("text",
+    x = stats::quantile(cluster_scores$cluster_contam_perc, 0.10),
+    y = Inf, vjust = 1.5, label = "Low", color = "gray30"
+  ) +
+  ggplot2::annotate("text",
+    x = stats::quantile(cluster_scores$cluster_contam_perc, 0.80),
+    y = Inf, vjust = 1.5, label = "Medium", color = "gray30"
+  ) +
+  ggplot2::annotate("text",
+    x = stats::quantile(cluster_scores$cluster_contam_perc, 0.97),
+    y = Inf, vjust = 1.5, label = "High", color = "gray30"
+  ),
+  
+  nrow = 1
+)
+```
+
++ Gather all the data together:
+
+  + Join the cluster scores data to the cluster (per protein) dataframe and the 
+`hSAINT` results for classification
 
 ```{r Join the Summary dataframe to the Protein Level dataframes}
 protein_cluster_df <- clusters_df |> 
@@ -331,35 +603,11 @@ protein_cluster_df <- clusters_df |>
       dplyr::ungroup()
   ) |> 
   dplyr::mutate(dplyr::across(c(dplyr::where(is.double)), ~ round(.x, 3))) |> 
-  dplyr::mutate(
-    cluster_class = dplyr::case_when(
-      cluster_median_hSAINT_score > 0.5 &
-        cluster_contam_perc > 
-        cluster_scores |> 
-        dplyr::pull(cluster_contam_perc) |> 
-        stats::median() ~ 'High hSAINT, High Contamination',
-      cluster_median_hSAINT_score > 0.5 &
-        cluster_contam_perc <
-        cluster_scores |> 
-        dplyr::pull(cluster_contam_perc) |> 
-        stats::median() ~ 'High hSAINT, Low Contamination',
-      cluster_median_hSAINT_score < 0.5 &
-        cluster_contam_perc > 
-        cluster_scores |> 
-        dplyr::pull(cluster_contam_perc) |> 
-        stats::median() ~ 'Low hSAINT, High Contamination',
-      cluster_median_hSAINT_score < 0.5 &
-        cluster_contam_perc <
-        cluster_scores |> 
-        dplyr::pull(cluster_contam_perc) |> 
-        stats::median() ~ 'Low hSAINT, Low Contamination'
-    )) |> 
   dplyr::relocate(cluster_class, .after = cluster) |> 
   dplyr::arrange(desc(protein_hSAINT_score), Protein) |> 
   dplyr::group_by(cluster) |> 
-  dplyr::mutate(cluster_clean_n = sum(protein_contam_flag == 0), .after = cluster_size) |> 
-  dplyr::mutate(cluster_clean_fraction = round((cluster_clean_n/cluster_size)*100, 2), .after = cluster_clean_n) |> 
   dplyr::ungroup()
+
 head(protein_cluster_df)
 ```
 
@@ -377,7 +625,7 @@ EntrezIDs <- AnnotationDbi::select(
 EntrezMap <- stats::setNames(EntrezIDs$ENTREZID, EntrezIDs$SYMBOL)
 ```
 
-Create enrichment functions
++ Create enrichment functions
 
 ```{r Create Enrichment Functions}
 background_genes <- EntrezIDs |> # use the EntrezIDs mapped from the modules_df
@@ -427,7 +675,7 @@ get_reactome <- function(genes, EntrezMap) {
 }
 ```
 
-Run the functions on the dataset in parallel (multiple CPUs)
++ Run the functions on the dataset in parallel (multiple CPUs)
 
 ```{r Parallelize Enrichment, eval = FALSE}
 future::plan(future::multisession, workers = 6)
@@ -491,7 +739,7 @@ names(enrichment_results) <- cluster_ids
 rm(p)
 ```
 
-Gather enrichment results
++ Gather enrichment results
 
 ```{r Consolidate Enrichment Results, eval = FALSE}
 global_enrichment_results_df <- lapply(enrichment_results, function(x) {
@@ -511,16 +759,11 @@ global_enrichment_results_df <- lapply(enrichment_results, function(x) {
   purrr::map_df(., .f = as.data.frame) |>  # join to the scores and hSAINT classes
   dplyr::full_join(cluster_scores) |> 
   dplyr::filter(!is.na(GO_Category)) |> 
-  dplyr::inner_join(
-    protein_cluster_df |> 
-      dplyr::distinct(cluster, cluster_class)
-  ) |> 
   dplyr::group_by(cluster) |> 
   dplyr::arrange(cluster_contam_perc, desc(cluster_median_hSAINT_score), p.adjust) |> 
   dplyr::relocate(cluster_class, .after = cluster)
 
-global_enrichment_results_df |> 
-  head()
+head(global_enrichment_results_df)
 ```
 
 ```{r Load Cluster GO GSEA, eval = TRUE, echo = FALSE}
@@ -528,36 +771,37 @@ load("../../analysis/R/HDBSCAN/HDBSCANCluster_GO_GSEA.rda")
 global_enrichment_results_df <- HDBSCANCluster_GO_GSEA
 rm(HDBSCANCluster_GO_GSEA)
 
-global_enrichment_results_df |> 
-  head()
+head(global_enrichment_results_df)
 ```
 
-Filtering proteins devoid of contamination by literature review or CRAPome frequency
-substantially alters the GO enrichment of clusters, leaving the larger clusters-- 
-typically, the "background" clusters or "clean, signal-less" clusters -- to 
-provide the enrichment
+Removing proteins identified as contaminants by literature review or `CRAPome` 
+frequency substantially alters the `GO enrichment` of clusters
 
-**TMEM is clustered into the noise cluster**, likely because of its low-variance
-counts across treatments and weak correlation with other protein abundances; this 
+  + This leaves the larger clusters as the more likely sources of enrichment
+  
+  + However, `HDBSCAN` will "dump" un-structured proteins into these "collection
+  clusters"
+
+**TMEM falls into the noise cluster**, likely because of its low-variance
+counts across replicates and weak correlation with other protein abundances; this 
 is not uncommon for a transmembrane protein with no prior for potential interactors
 
-Using `hierarchical SAINT score` as an explanatory tool, this is likely because 
-the clusters without GO enrichment contained a large mix of proteins scored as 
-"noise" (low posterior probability of being a true interactor) and signal 
-(high posterior probability of being a true interactor)
+  + Clusters without enrichment are smaller and even small clusters with high 
+  `hierarchical SAINT score mass` (cluster's `hSAINT score` sum) may not be large enough to distinguish from 
+  the collection of proteins identified in the experiment
 
-In order to better make sense of the clustering-- describing the **"un-enriched" clusters**-- 
-"sub-cluster" GO GSEA was conducted
+For completeness-- describing the **"un-enriched" clusters**-- "sub-cluster" 
+`GO GSEA` was conducted
 
 ## SubCluster GO GSEA
 
-Sub-cluster enrichment analysis on clusters without any enrichment (to describe
-themes of proteins within these clusters)
+Sub-cluster enrichment analysis on clusters without any enrichment (to attempt 
+to describe themes of proteins within these clusters)
 
-+ To do this, we adapt the method from hierarchical clustering vignette, where a 
++ To do this, we adapt the method from the [hierarchical clustering vignette](../../analysis/HierarchicalClustering.md), where a 
 dendrogram is created from the raw counts matrix
 
-+ Then we create a local hierarchical tree and index it by filtering *for* the 
++ Then, we create a local hierarchical tree and index it by filtering *for* the 
 proteins that were not in an enriched cluster
 
 ```{r SubCluster index}
@@ -731,16 +975,12 @@ subcluster_enrichment_results_df <- subcluster_enrichment_df |>
   dplyr::filter(!is.na(GO_Category)) |> 
   dplyr::select(-id) |> 
   dplyr::full_join(
-    cluster_scores
+    cluster_scores 
   ) |>
-  dplyr::inner_join(
-    protein_cluster_df |> dplyr::distinct(cluster, cluster_class)
-  ) |> 
   dplyr::filter(!is.na(GO_Category)) |> 
   dplyr::relocate(cluster_class, .after = cluster)
 
-subcluster_enrichment_results_df |> 
-  head()
+head(subcluster_enrichment_results_df)
 ```
 
 ```{r Load SubCluster GO_GSEA data, echo = F}
@@ -764,11 +1004,11 @@ rm(tier2_clusters)
 
 ## Construct the Cluster GO (similarity) Network
 
-Because `HDBSCAN` produced **47 clusters** with a modest number of enriched `GO terms`,
++ Because `HDBSCAN` produced **47 clusters** with a modest number of enriched `GO terms`,
 we applied semantic similarity reduction to collapse "redundant" `GO terms` prior 
 to network visualization
 
-Full GO results are retained in the accompanying tables
++ Full GO results are retained in the accompanying tables
 
 ### Gather All GO Terms
 
@@ -800,8 +1040,6 @@ GO_gene_mat <- GO_df |>
   dplyr::select(GO_Term, gene_set) |> 
   tidyr::unnest_longer(gene_set) |> 
   stats::xtabs(~ GO_Term + gene_set, data = _)
-
-head(GO_gene_mat)
 ```
 
 ```{r Compute the Jaccard Similarity Distance}
@@ -815,7 +1053,7 @@ GO_jaccard_dist <- {
 }
 ```
 
-Hierarchically cluster on the `GO Term jaccard distance matrix`
++ Hierarchically cluster on the `GO Term jaccard distance matrix`
 
 ```{r Hierarchically Cluster Each Similarity Matrix}
 GO_jaccard_clusters <- {
@@ -824,10 +1062,10 @@ GO_jaccard_clusters <- {
 }
 ```
 
-`Jaccard clusters` are the collection of similar GO Term clusters per HDBSCAN 
-cluster
++ `Jaccard clusters` are the collection of similar `GO Term` clusters per 
+**HDBSCAN cluster**
 
-We show all of these terms here for posterity, but will use the **5** most 
++ We show all of these terms here for posterity, but will use the **5** most 
 significantly enriched terms across *any* **Jaccard clusters** that are *nested within each* 
 **HDBSCAN cluster** to derive and visualize a `GO Term network` for the 
 `HDBSCAN clusters`
@@ -843,7 +1081,11 @@ GO_representative <- {
 }
 
 GO_top_5_per_hdbscan <- GO_representative |> 
-  dplyr::distinct(cluster_id, GO_Category, GO_Term, cluster, subcluster, Tier, FoldEnrichment, geneID, p.adjust) |> 
+  dplyr::distinct(cluster_id, 
+                  GO_Category, 
+                  GO_Term, 
+                  cluster, 
+                  subcluster, Tier, FoldEnrichment, geneID, p.adjust) |> 
   dplyr::group_by(cluster) |> 
   dplyr::arrange(p.adjust) |> 
   dplyr::mutate(rank = dplyr::dense_rank(p.adjust)) |> 
@@ -852,7 +1094,6 @@ GO_top_5_per_hdbscan <- GO_representative |>
 
 GO_top_5_per_hdbscan |> head()
 ```
-
 
 ```{r Construct GO Network Object}
 go_network <- GO_top_5_per_hdbscan |> 
@@ -900,12 +1141,14 @@ if (identical(fmt, "html")) {
 
 ## Cluster Dot Plot
 
++ Dot plot with semantic collapse of the "noise" cluster by the `Jaccard` method 
+above
+
 ```{r RawClusterSubClusterDotPlotOfGOTerms, warning = F, message = F}
-global_enrichment_results_df |> 
-  dplyr::full_join(subcluster_enrichment_results_df) |> 
-  dplyr::filter(!is.na(GO_Term)) |> 
-  dplyr::filter(!is.na(GO_Category)) |> 
-  dplyr::filter(!is.na(cluster_median_hSAINT_score)) |> 
+GO_top_5_per_hdbscan |> 
+  dplyr::inner_join(
+    cluster_scores |> dplyr::distinct(cluster, cluster_median_hSAINT_score)
+  ) |> 
   dplyr::mutate(
     Tier = dplyr::case_when(
       is.na(subcluster) ~ paste0('Clust. ', cluster),
@@ -917,7 +1160,6 @@ global_enrichment_results_df |>
                                    TRUE ~ 'Not Enriched')
     ) |> 
   dplyr::group_by(cluster) |>  
-  dplyr::slice_head(n = 3) |>
   dplyr::arrange(p.adjust) |>
   ggplot2::ggplot(
     ggplot2::aes(
@@ -953,6 +1195,7 @@ global_enrichment_results_df |>
                   color = ggplot2::guide_legend(override.aes = list(size = 5,
                                                                     shape = 19,
                                                                     color = c('navy',
+                                                                              'darkgoldenrod2',
                                                                               'firebrick'))),
                   alpha = ggplot2::guide_legend(override.aes = list(size = 5,
                                                                     shape = 19)),
@@ -960,6 +1203,7 @@ global_enrichment_results_df |>
                   # size = 'none'
                   ) +
   ggplot2::scale_color_manual(values = c('navy',
+                                         'darkgoldenrod2',
                                         'firebrick'))
 ```
 
@@ -1081,13 +1325,7 @@ visNetwork::visNetwork(
 rm(coords)
 ```
 
-Clusters with **enriched** `GO Terms` are **blue**
-
-Here, only the enriched sub-clusters were included:
-the clusters with that did not reach significant enrichment broadly, but did 
-reach significant enrichment when that cluster was broken up. These `Enriched` 
-**sub-clusters** are **non-blue** and the top 5 (or fewer) most significantly 
-enriched `GO Terms`
++ Clusters with **enriched** `GO Terms` are **blue**
 
 ```{r, results='asis', echo=FALSE}
 fmt <- knitr::pandoc_to()
@@ -1110,20 +1348,27 @@ options(htmlwidgets.shinyMode = TRUE)
 ```{r Print Protein Level Results Table}
 DT::datatable(
   protein_cluster_df |> 
-    dplyr::full_join(GO_df |> 
-                       dplyr::mutate(Protein = stringr::str_split(geneID,
-                                                                  pattern = '/')) |> 
-                       tidyr::unnest_longer(Protein) |> 
-                       dplyr::distinct(Protein, .keep_all = T) |> 
-                       dplyr::relocate(c(Protein, cluster, subcluster), .before = 1) |> 
-                       dplyr::select(-c(Count:weight))
-                     ) |> 
-    dplyr::filter(!is.na(GO_Term)) |> 
-    dplyr::filter(!is.na(GO_Category))
+  dplyr::full_join(
+    GO_df |> 
+      dplyr::select(-c(cluster_mean_hSAINT_score:cluster_CRAPome_flag_perc, Tier:weight)) |> 
+      dplyr::relocate(subcluster, .after = cluster) |> 
+      dplyr::mutate(Protein = stringr::str_split(geneID, pattern = '\\/'), .before = 1) |>
+      dplyr::mutate(dplyr::across(c(is.numeric),~as.character(.x))) |> 
+      tidyr::pivot_longer(cols = c(2:17), names_to = 'columns', values_to = 'vals') |> 
+      tidyr::unchop(cols = Protein) |> 
+      tidyr::pivot_wider(id_cols = Protein, names_from = 'columns', values_from = 'vals') |> 
+      tidyr::unchop(cols = c(2:17)) |> 
+      dplyr::mutate(dplyr::across(c(RichFactor:qvalue, Count), ~round(as.numeric(.x), 5))) |> 
+      dplyr::filter(!is.na(GO_Term))
+  ) |> 
+  dplyr::distinct() |> 
+  dplyr::relocate(protein_stat_class, .before = protein_hSAINT_score) |> 
+  dplyr::relocate(subcluster, .after = subcluster) |> 
+  dplyr::relocate(c(dplyr::contains("cluster_")), .after = Count)
 )
 ```
 
-This table exists as [HDBSCAN_protein_level_GO_GSEA.rda](../../analysis/R/HDBSCAN/HDBSCAN_protein_level_GO_GSEA.rda) in [Endo/analysis/R/HDBSCAN/](../../analysis/R/HDBSCAN)
++ This table exists as [HDBSCAN_protein_level_GO_GSEA.rda](../../analysis/R/HDBSCAN/HDBSCAN_protein_level_GO_GSEA.rda) in [Endo/analysis/R/HDBSCAN/](../../analysis/R/HDBSCAN)
 
 ## Clustering Results Table by Cluster
 
@@ -1131,11 +1376,16 @@ This table exists as [HDBSCAN_protein_level_GO_GSEA.rda](../../analysis/R/HDBSCA
 DT::datatable(
   GO_df |> 
     dplyr::full_join(cluster_scores) |> 
-    dplyr::select(-c(Tier:weight))
+    dplyr::select(-c(Tier:weight)) |> 
+    dplyr::relocate(subcluster, .after = cluster) |> 
+    dplyr::relocate(GO_Category, .before = GO_ID) |> 
+    dplyr::group_by(cluster, subcluster) |> 
+    dplyr::arrange(p.adjust) |> 
+    dplyr::filter(!is.na(GO_Term))
 )
 ```
 
-This table exists as [HDBSCAN_cluster_level_GO_GSEA.rda](../../analysis/R/HDBSCAN/HDBSCAN_cluster_level_GO_GSEA.rda) in [Endo/analysis/R/HDBSCAN/](../../analysis/R/HDBSCAN)
++ This table exists as [HDBSCAN_cluster_level_GO_GSEA.rda](../../analysis/R/HDBSCAN/HDBSCAN_cluster_level_GO_GSEA.rda) in [Endo/analysis/R/HDBSCAN/](../../analysis/R/HDBSCAN)
 
 ```{r, results='asis', echo=FALSE}
 fmt <- knitr::pandoc_to()
@@ -1150,28 +1400,37 @@ if (identical(fmt, "html")) {
 ```
 
 
-The largest clusters, at least one of which is "noise", intuitively have the largest
-`cluster_hSAINT_score_mass`. However, when sorting this first by low contaminant 
-clusters (`cluster_contam_perc`), **Cluster 25** has the highest volume of 
-`hSAINT` signal across clusters, with some interesting potential candidates 
++ The largest clusters have the largest `cluster_hSAINT_score_mass` (sum of all 
+`hSAINT score`s)
 
-**Cluster 29** had a `cluster_hSAINT_score_mass` higher than the overall 
++ However, when sorting first by low contaminant clusters 
+(`cluster_contam_perc`), **Cluster 25** has the highest volume of `hSAINT` 
+signal across clusters, with some interesting potential candidates 
+
++ **Cluster 29** had a `cluster_hSAINT_score_mass` higher than the overall 
 `cluster_hSAINT_score_mass` median score and with zero contaminants
 
-Few clusters returned enriched `GO Terms`, likely due to `HDBSCAN`'s tendency to 
-create many smaller-sized clusters. When coupled with the contamination filter 
-on cluster member proteins (further limiting the number of proteins available 
-on which to detect enrichment), this reduces the vast majority of `GO Terms`
++ Few clusters returned enriched `GO Terms`, likely due to `HDBSCAN`'s tendency to 
+create many smaller-sized clusters
+
+  + When coupled with the contamination filter on cluster member proteins 
+  (further limiting the number of proteins available on which to detect 
+  enrichment), this reduces the vast majority of `GO Terms`
 
 
-As noted above, it is mildly surprising `TMEM` is in the "noise" cluster, due to 
-its strong consistency in abundance across replicates
++ As noted above, it is mildly surprising **TMEM** is in the "noise" cluster,
+due to its strong consistency in abundance across replicates
 
-A more in-depth analysis of proteins across clusters where there is greater 
-probability of interacting with `TMEM` is encouraged-- collecting groups of proteins,
++ A more in-depth analysis of proteins across clusters where there is greater 
+probability of interacting with **TMEM** is encouraged-- collecting groups of proteins,
 related by localization or function, is useful for inferring data validity; 
 however, data coherence **should not negate** investigating proteins with high `hSAINT`
 scores or are known/likely to interact with `TMEM` or related processes
 
-Collectively, it appears the `hierarchical SAINT` model has done a fair job at 
++ Collectively, it appears the `hierarchical SAINT` model has done a fair job at 
 delineating possible signal from noise
+
++ [Multi-modal statistical coherence](Coherence.Rmd) is designed to compare 
+the clustering method with the most merit in characterizing groups of proteins 
+more likely to be identified as true interactors of **TMEM184B**, in support of 
+the `hierarchical Poisson latent mixture model`

@@ -29,6 +29,59 @@ endolysosomal paper under revision (2025-02-28) for the Journal of Cell Science
 
 This vignette documents the `Hierarchical Clustering` of this IPMS data
 
++ The goal is to cluster protein-protein interaction candidates and assess the 
+clustering
+
++ In the event that the clustering is uninformative, we also classify proteins by 
+their `hierarchical SAINT posterior probability` (score, hereafter `hSAINT score`)--
+their **signal strength** according to the hierarchical latent mixture model results
+
+
++ We do this according to the density of all `hSAINT` scores
+
+  + The density is clearly bi-modal with separation at the extremes, thus there 
+  are three categories:
+
+    + **Low** = proteins with `hSAINT score`s within the density mode at the low 
+    extreme
+    
+    + **High** = proteins with `hSAINT score`s within the density mode at the 
+    high extreme
+    
+    + **Medium** = proteins with `hSAINT score`s in the "valley" between the modes
+    
+      + We empirically determine the "valley" using **mean shift**
+    
+    
++ The other dimension by which we classify proteins is **contamination**:
+
+  + Proteins identified in literature as contamination are given a **1** (not is **0**)
+  
+  + Proteins identified in the CRAPome repository in more than **5%** of 
+  studies are given a **1**
+  
+    + **Low Contamination** Proteins = **0** in both literature and CRAPome
+    
+    + **Medium Contamination** Proteins = **1** in either literature or CRAPome
+    
+    + **High Contamination** Proteins = **1** in both literature and CRAPome
+    
++ We apply the same empirical binning strategy at the cluster level for 
+`hSAINT score`s, since the distribution of cluster median `hSAINT` scores is also
+bi-modal with a middle plateau
+
+  + Because we lose protein-level resolution, we compute contamination rates 
+  (frequency of any protein with at least one contamination flag) and apply 
+  binning by tertiles, identifying an extreme outlier among a unimodal distribution
+  of rates
+  
+  + Thus, this clustering strategy allows comparison to other clustering strategies,
+  and complementation/external validity to `hSAINT scores` at the protein- and 
+  cluster-level
+  
+    + Every protein will have an `hSAINT score`, cluster assignment, contamination rate,
+    classification, and cluster classification
+
 ```{r reset-shiny-mode, include=FALSE}
 options(htmlwidgets.shinyMode = FALSE)
 ```
@@ -77,6 +130,9 @@ options(stringsAsFactors = FALSE)
 ```
 
 ## Load the Pre-Computed Data
+
++ Classify each protein into a matrix based on its `hSAINT` score and number of 
+contamination flags (**0**, **1**, **2**)
 
 ```{r Data Load}
 # Load precomputed objects from preprocessing
@@ -231,6 +287,9 @@ d <- stats::as.dist(1 - stats::cor(t(IPMS_mat), use = 'pairwise.complete.obs'))
 hc <- stats::hclust(d, method = "average")
 ```
 
++ Perform a grid search to assess the optimal 
+`hierarchical dendrogram tree cut height`
+
 ```{r Grid Search Cluster Size}
 sizes <- c(20, 30, 50, 80, 100)
 results <- list()
@@ -311,25 +370,26 @@ if (identical(fmt, "html")) {
   cat('# Cluster Descriptions\n')
 }
 ```
-In order to assess this method and also to compare/validate the hierarchical SAINT
-model, describing clusters based on the proteins in them is useful
++ In order to assess this clustering method and to also compare/validate the `hierarchical SAINT Poisson mixture model`, 
+describing clusters based on the proteins within them is useful
 
-Similarly localized proteins could be expected to have similar abundances to 
++ Similarly-localized proteins could be expected to have similar abundances to 
 each other as well as the target (**TMEM184B**)
 
-Similar functioning proteins could also be expected to have similar abundances 
++ Similarly-functioning proteins could also be expected to have similar abundances 
 to each other as well as the target
 
-Describing these clusters attained by `hierarchical clustering` via 
-gene ontology gene set enrichment analysis is, therefore, useful and standard 
-practice
++ Describing these clusters attained by `hierarchical clustering` via gene 
+ontology gene set enrichment analysis is, therefore, useful and standard practice
 
-Furthermore, we may be able to assemble a `protein-protein interaction network`
++ Furthermore, we may be able to assemble a `protein-protein interaction network`
 from the results
 
-I outline this below-- the methods and results for acquiring these clusters, 
++ We outline this below-- the methods and results for acquiring these clusters, 
 their constituent proteins, and how we make sense of them-- visualized as
-`dotplots`, `heatmaps`, and a `network`. I include searchable tables printed last
+`dotplots`, `heatmaps`, and a `network`
+
++ We include searchable tables printed last
 
 ## Extract Clusters
 
@@ -357,10 +417,10 @@ clusters_df <- clusters_list %>%
 rm(list = ls(pattern = '_mat'))
 ```
 
-## Join Clusters to hSAINT
+## Compute Cluster Summaries
 
-Include score summaries (mean and median posterior probability scores, ranks, 
-and literature or CRAPome contamination rate)
++ Include score summaries (mean and median `hSAINT score`s, ranks, and 
+contamination rates)
 
 ```{r Summarize SAINT Scores and Contamination Rates}
 cluster_scores <- clusters_df |>  
@@ -414,8 +474,12 @@ cluster_scores <- clusters_df |>
   dplyr::select(-cluster_hSAINT_class, -cluster_contam_class) |> 
   dplyr::relocate(cluster_class, .after = cluster)
 
-cluster_scores
+head(cluster_scores)
 ```
+
+### Cluster Distributions of hSAINT and Contamination Scores
+
++ Plot the distributions of metrics describing clusters, independent of `GO Terms`
 
 ```{r ClusterMetricDistributions, fig.height=8}
 # extract the cluster median hSAINT score distribution class indeces
@@ -488,7 +552,10 @@ cowplot::plot_grid(
 )
 ```
 
-Join the cluster scores to the cluster (per protein) dataframe and the `hSAINT` results for classification
++ Gather all the data together:
+
+  + Join the cluster scores data to the cluster (per protein) dataframe and the 
+`hSAINT` results for classification
 
 ```{r Join the Summary dataframe to the Protein Level dataframes}
 
@@ -512,22 +579,21 @@ head(protein_cluster_df)
 
 ## Cluster Classification Rationale
 
-
 `Cluster median hSAINT scores`
 
-  + Scores exhibit a weak bimodal distribution
+  + Scores exhibit a weak bi-modal distribution
   
   + Applying 1‑D mean‑shift to the empirical density identifies a valley between 
   **0.436** and **0.454**, the x-coordinates of the local minimum of the 
   estimated density function
   
-  + We use this valley to define cluster-level hSAINT classes consistent with 
+  + We use this valley to define cluster-level `hSAINT` classes consistent with 
   the mode-based classification used at the protein level (**Low**, **Mid** 
   medium), **High**)
   
 `Cluster contamination rates`
 
-  + Also unimodal and right‑skewed, but with an extreme outlier
+  + Also uni-modal and right‑skewed, but with an extreme outlier
   
   + Although the kernel density estimate shows a small secondary bump, this 
   feature is driven the outlier and does *not* represent a true mode
@@ -561,7 +627,7 @@ EntrezIDs <- AnnotationDbi::select(
 EntrezMap <- stats::setNames(EntrezIDs$ENTREZID, EntrezIDs$SYMBOL)
 ```
 
-Create enrichment functions
++ Create enrichment functions
 
 ```{r Create Enrichment Functions}
 background_genes <- EntrezIDs |> # use the EntrezIDs mapped from the modules_df
@@ -610,7 +676,7 @@ get_reactome <- function(genes, EntrezMap) {
 }
 ```
 
-Run the functions on the dataset in parallel (multiple CPUs)
++ Run the functions on the dataset in parallel (multiple CPUs)
 
 ```{r Parallelize Enrichment, eval = FALSE}
 future::plan(future::multisession, workers = 6)
@@ -672,7 +738,7 @@ progressr::with_progress({
 rm(p)
 ```
 
-Gather enrichment results
++ Gather enrichment results
 
 ```{r Consolidate Enrichment Results, eval = FALSE}
 global_enrichment_results_df <- purrr::map_dfr(
@@ -729,22 +795,27 @@ global_enrichment_results_df <- HierarchicalCluster_GO_GSEA
 rm(HierarchicalCluster_GO_GSEA)
 ```
 
-The "`High SAINT score`" clusters were among the clusters with significant 
++ The "`High SAINT score`" clusters were among the clusters with significant 
 enrichment of all the proteins detected in the experiments
 
-However, many clusters did not have significant enrichment relative to the entire
-set of proteins in the experiments, *including TMEM's*. Using `hierarchical SAINT score` 
-as a explanatory tool, this is likely because the clusters without GO enrichment 
-contained a large mix of proteins scored as "noise" (low posterior probability 
-of being a true interactor) and signal (high posterior probability of being a 
-true interactor)
++ However, many clusters did not have significant enrichment relative to the entire
+set of proteins in the experiments, *including TMEM's*
 
-In order to better make sense of the clustering-- describing the **"un-enriched" clusters**-- 
-"sub-cluster" GO GSEA was conducted
++ This is likely because of its low-variance counts across replicates and weak 
+correlation with other protein abundances; this is not uncommon for a 
+transmembrane protein with no prior for potential interactors
+
+  + Clusters without enrichment are smaller and even small clusters with high 
+  `hierarchical SAINT score mass` (cluster's `hSAINT score` sum) may not be 
+  large enough to distinguish from the collection of proteins identified in the 
+  experiment
+
++ For completeness-- describing the **"un-enriched" clusters**-- "sub-cluster" 
+`GO GSEA` was conducted
 
 ## SubCluster GO GSEA
 
-Sub-cluster enrichment analysis on clusters without any enrichment (to describe
++ Sub-cluster enrichment analysis on clusters without any enrichment (to describe
 themes of proteins within these clusters)
 
 ```{r SubCluster index}
@@ -921,8 +992,7 @@ subcluster_enrichment_results_df <- subcluster_enrichment %>%
   dplyr::filter(!is.na(GO_Category)) |> 
   dplyr::relocate(cluster_class, .after = 3)
 
-subcluster_enrichment_results_df |> 
-  head()
+head(subcluster_enrichment_results_df)
 ```
 
 ```{r Load SubCluster GO GSEA, eval = TRUE, echo = FALSE}
@@ -1190,29 +1260,32 @@ visNetwork::visNetwork(
 rm(coords)
 ```
 
-Clusters with `enriched` GO Terms are `blue`
++ Clusters with `enriched` GO Terms are `blue`
 
-Here, only the enriched sub-clusters were included:
-the clusters with that did not reach significant enrichment broadly, but did 
-reach significant enrichment when that cluster was broken up. These `Enriched` 
-**sub-clusters** are **non-blue**
++ Here, only the enriched sub-clusters were included: the clusters that did *not* 
+reach significant enrichment, but did upon examining the un-contaminated proteins 
+within the cluster to all proteins within the cluster
 
-Removing proteins from the list of genes comparing enrichment against in **GO GSEA** 
-having been identified as contamination in literature or in the `CRAPome` significantly reduces
-and changes the `GO Terms` describing `clusters`
+  + These `Enriched` **sub-clusters** are **non-blue**
 
-This strategy generally favors large clusters, since they are more likely to 
++ Removing known contaminants within the interactome field (literature) and from 
+commonly occuring within the CRAPome significantly reduces the list of proteins 
+evaluated for enrichment and changes the `GO Terms` describing `clusters`
+
++ This strategy generally favors large clusters, since they are more likely to 
 retain enrichment
 
   + This leaves **Cluster 1** and **Cluster 25** as the only clusters retaining 
-  any useful signal to describe their clusters, supporting previous experiments 
-  and hypotheses regarding `TMEM`
+  any statistically significant signal to describe their clusters, supporting 
+  previous experiments and hypotheses regarding **TMEM**
 
-`TMEM184B`, itself, was in **Cluster 12**, which did *NOT* return any enriched GO
-Terms, likely due to its membrane protein nature (and putative localization, 
-where it may progress through the endomembrane system and collide with a wide
-variety of proteins), "sticking" to any number of non-specific proteinss. This 
-is common among TM protein IPMS
++ **TMEM184B**, itself, was in **Cluster 12**, which did *NOT* return any 
+enriched `GO Terms`, likely due to its membrane protein nature (and putative 
+localization, where it progresses through the endomembrane system and may 
+collides with a wide variety of proteins), "sticking" to any number of 
+non-specific proteinss
+
+  + This is common among TM protein IPMS
 
 ```{r, results='asis', echo=FALSE}
 fmt <- knitr::pandoc_to()
@@ -1305,10 +1378,10 @@ pheatmap::pheatmap(
 )
 ```
 
-`TMEM`'s cluster (**12**) is not siginficantly enriched above the proteins detected by
-the mass spectrometer.
++ **TMEM**'s cluster (**12**) is not siginficantly enriched above the proteins 
+detected by the mass spectrometer
 
-Subclusters within **cluster 12** are not enriched 
++ Subclusters within **cluster 12** are not enriched 
 
 ### High hSAINT Score, Low Contamination Cluster Heatmap (Clear Signal)
 
@@ -1544,7 +1617,7 @@ DT::datatable(
 )
 ```
 
-This (complete) table exists as [hClust_protein_level_GO_GSEA.rda](../../analysis/R/hClust/hClust_protein_level_GO_GSEA.rda) in [Endo/analysis/R/hClust/](../../analysis/R/hClust)
++ This (complete) table exists as [hClust_protein_level_GO_GSEA.rda](../../analysis/R/hClust/hClust_protein_level_GO_GSEA.rda) in [Endo/analysis/R/hClust/](../../analysis/R/hClust)
 
 ## Clustering Results Table by Cluster
 
@@ -1558,7 +1631,7 @@ DT::datatable(
 )
 ```
 
-This table exists as [hClust_cluster_level_GO_GSEA.rda](../../analysis/R/hClust/hClust_cluster_level_GO_GSEA.rda) in [Endo/analysis/R/hClust/](../../analysis/R/hClust)
++ This table exists as [hClust_cluster_level_GO_GSEA.rda](../../analysis/R/hClust/hClust_cluster_level_GO_GSEA.rda) in [Endo/analysis/R/hClust/](../../analysis/R/hClust)
 
 ```{r, results='asis', echo=FALSE}
 fmt <- knitr::pandoc_to()
@@ -1572,19 +1645,27 @@ if (identical(fmt, "html")) {
 }
 ```
 
-**Cluster 1** has the highest volume of `hSAINT` signal across clusters, with some 
-interesting potential candidates
++ **Cluster 1** has the highest volume of `hSAINT` signal across clusters, with 
+some interesting potential candidates
 
-As noted above, it is not surprising **Cluster 12**, `TMEM`'s cluster, was not 
-enriched, containing a large amount of proteins with low `hSAINT` scores, likely due
-to `TMEM`'s nature as a transmembrane protein, exacerbated by its localization to 
-multiple organellar compartments
++ As noted above, it is not surprising **Cluster 12**, **TMEM**'s cluster, was 
+not enriched, containing a large amount of proteins with low `hSAINT` scores, 
+likely due to **TMEM**'s nature as a transmembrane protein, exacerbated by its 
+localization to multiple organellar compartments
 
-A more in-depth analysis of proteins across clusters where there is greater 
-probability of interacting with `TMEM` is encouraged-- collecting groups of proteins,
-related by localization or function, is useful for inferring data validity; 
-however, data coherence **should not negate** investigating proteins with high `hSAINT`
-scores or are known/likely to interact with `TMEM` or related processes
++ A more in-depth analysis of proteins across clusters, on a protein-by-protein 
+basis, where there is greater probability of interacting with **TMEM** is 
+encouraged
 
-Collectively, it appears the `hierarchical SAINT` model has done a fair job at 
+  + Collecting groups of proteins, related by localization or function, is
+  useful for inferring data validity; however, positive or negative data 
+  coherence **should not negate** investigating proteins with high `hSAINT` 
+  scores or are known/likely to interact with `TMEM` or related processes
+
++ Collectively, it appears the `hierarchical SAINT` model has done a fair job at 
 delineating possible signal from noise
+
++ [Multi-modal statistical coherence](Coherence.Rmd) is designed to compare 
+the clustering method with the most merit in characterizing groups of proteins 
+more likely to be identified as true interactors of **TMEM184B**, in support of 
+the `hierarchical Poisson latent mixture model`
