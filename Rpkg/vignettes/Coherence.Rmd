@@ -1,0 +1,518 @@
+---
+title: "Coherence vignette"
+author: "Erik Larsen"
+date: "`r Sys.Date()`"
+always_allow_html: true
+output:
+  html_document:
+    toc: true
+    fig_width: 10
+    fig_height: 10
+  pdf_document:
+    fig_width: 10
+    fig_height: 10
+    latex_engine: xelatex
+  md_document:
+    variant: gfm
+vignette: >
+  %\VignetteIndexEntry{Coherence vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Overview
+
++ `hSAINT scores` are the **posterior probability** of a given protein being a 
+*true interactor* with a target protein of interest
+
++ The `hierarchical Significance Analysis of INTeractome`, **hSAINT**, model-- a 
+latent, 3-variable hierarachical Bayesian mixture model-- addresses some key 
+limitations of the gold standard `SAINT` model
+  
+  + That model is a latent, 2-variable Poisson mixture model widely used in 
+  "interactomics"
+  
+  + For more detail about the `hSAINT` model, see the [hSAINT README](../../python/README.md)
+
++ The goal of this vignette is to evaluate the **coherence** of clustering results
+produced by multiple methods (`hierarchical clustering` and `HDBSCAN`) applied 
+to IP‑MS/MS data
+
++ The data for the vignette was originally published in the `Journal of Cell Science`
+
+# Introduction
+
+**Coherence** is assessed along three independent axes:
+
+1. **Statistical Coherence**  
+   Whether proteins grouped into a cluster share similar `hSAINT` scores and
+   whether the cluster exhibits a strong, interpretable `hSAINT` mass
+
+2. **Contamination Coherence**  
+   Whether the clean_fraction and contamination_rate of a cluster align with
+   expectations for real biological signal (e.g., strong clusters may tolerate
+   higher contamination if the clean subset is coherent)
+
+3. **Semantic Coherence**  
+   Whether the cluster yields enriched `GO term`s when using a contamination‑aware
+   foreground definition
+
+These three axes provide a principled way to determine whether a cluster 
+represents real biological structure or is an artifact of the clustering method
+
+
+```{r reset-shiny-mode, include=FALSE}
+options(htmlwidgets.shinyMode = FALSE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 10,
+  fig.height = 12,
+  dev = c("png", "pdf"),
+  fig.path = "../../analysis/R/Coherence/"
+)
+```
+
+## Attach Packages
+
+```{r Attach Packages, message=F,warning=F}
+# data/wrangling
+library(tidyverse)
+library(Endo)
+library(DT)
+
+  ## (hdbscan)
+library(dbscan)
+
+# GSEA/viz
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ReactomePA)
+library(AnnotationDbi)
+library(cowplot)
+
+# progress bar
+library(progressr)
+
+# parallelization
+library(future)
+library(future.apply)
+
+# network viz
+library(visNetwork)
+
+options(stringsAsFactors = FALSE)
+```
+
+## Data Inputs
+
++ Please see the other clustering vignettes on the classification methods used 
+on proteins and clusters ([here](HDBSCAN.Rmd) and [here](HierarchicalClustering.Rmd))
+
+```{r Data Load}
+# Load precomputed objects from preprocessing
+load("../../analysis/R/precompute_objects.rda")
+load('../../analysis/R/hClust/hClust_protein_cluster_df.rda')
+load('../../analysis/R/HDBSCAN/HDBSCAN_protein_cluster_df.rda')
+load('../../analysis/R/hClust/HierarchicalSubClustCluster_GO_GSEA.rda')
+load('../../analysis/R/hClust/HierarchicalCluster_GO_GSEA.rda')
+load('../../analysis/R/HDBSCAN/HDBSCANSubClustCluster_GO_GSEA.rda')
+load('../../analysis/R/HDBSCAN/HDBSCANCluster_GO_GSEA.rda')
+```
+
+```{r Create the Mean Shift Function to Characterize hSAINT scores}
+mean_shift_valley <- function(gamma_vec) {
+
+  # kernel density estimate on [0,1]
+  d <- stats::density(gamma_vec, from = 0, to = 1)
+
+  # tibble with density and neighbors for derivative and mode detection
+  df <- tibble::tibble(
+    x       = d$x,
+    f       = d$y,
+    f_lag   = dplyr::lag(d$y),      # f[i-1]
+    f_lead  = dplyr::lead(d$y)      # f[i+1]
+  )
+
+  # discrete derivative of the density (forward difference)
+  # slope[i] approximates f'(x[i])
+  df <- df %>%
+    dplyr::mutate(
+      slope = f_lead - f
+    )
+
+  # indices where both neighbors exist (needed for local maxima)
+  df <- df %>%
+    dplyr::mutate(
+      interior = !is.na(f_lag) & !is.na(f_lead)
+    )
+
+  # local maxima (aka modes) satisfy f > f_lag and f > f_lead
+  df <- df %>%
+    dplyr::mutate(
+      is_mode = interior & f > f_lag & f > f_lead
+    )
+
+  # extract mode indices
+  mode_idx <- which(df$is_mode)
+
+  # assume two modes: left (noise) and right (signal)
+  left_mode  <- mode_idx[1]
+  right_mode <- mode_idx[length(mode_idx)]
+
+  # mean-shift basin assignment:
+  # each grid point moves uphill following the sign of the slope
+  basin_target <- integer(nrow(df))
+
+  for (i in seq_len(nrow(df))) {
+    j <- i
+    # move right while slope is positive
+    while (j < nrow(df) && df$slope[j] > 0) {
+      j <- j + 1
+    }
+    # move left while slope is negative
+    while (j > 1 && df$slope[j - 1] < 0) {
+      j <- j - 1
+    }
+    basin_target[i] <- j
+  }
+
+  # classify each point by which mode it's closer to
+  left_dist  <- abs(basin_target - left_mode)
+  right_dist <- abs(basin_target - right_mode)
+
+  class_label <- ifelse(left_dist < right_dist, 1L, 2L)
+
+  # valley boundary is the last index classified as left
+  boundary_idx <- max(which(class_label == 1L))
+
+  # valley location (single point)
+  c <- df$x[boundary_idx]
+
+  # expand valley asymmetrically using slope magnitude
+  # threshold is relative to max slope magnitude
+  eps <- 0.01 * max(abs(df$slope), na.rm = TRUE)
+
+  left_idx <- boundary_idx
+  while (left_idx > 1 && abs(df$slope[left_idx - 1]) < eps) {
+    left_idx <- left_idx - 1
+  }
+
+  right_idx <- boundary_idx
+  while (right_idx < nrow(df) && abs(df$slope[right_idx]) < eps) {
+    right_idx <- right_idx + 1
+  }
+
+  c1 <- df$x[left_idx]
+  c2 <- df$x[right_idx]
+
+  c(c1, c2)
+}
+```
+
+```{r Apply the Mean Shift}
+hSAINT <- hSAINT |> 
+  dplyr::mutate(
+    hSAINT_class = {
+      cutpoints <- mean_shift_valley(score) # find the indeces of the class modes bounding the valley between them
+      dplyr::case_when(
+        score < cutpoints[1] ~ 'Low hSAINT', # assign classes based on post. prob
+        score <= cutpoints[2] ~ 'Medium hSAINT',
+        score > cutpoints[2] ~ 'High hSAINT'
+      )
+    },
+    contam_flag = lit_flag + CRAPome_flag,
+    
+    # assign contamination class based on frequency across shared studies and id in lit
+    contam_class = dplyr::case_when(contam_flag == 0 ~ 
+                                              'Low Contamination',
+                                            contam_flag == 1 ~ 
+                                              'Medium Contamination',
+                                            contam_flag == 2 ~ 
+                                              'High Contamination'),
+    
+    stat_class = paste(hSAINT_class,
+                               contam_class, sep = ', ')
+  ) |> # assign the orthogonal statistical model-based classes
+  
+  dplyr::rename(hSAINT_score = score) |> 
+  dplyr::relocate(contam_flag, .after = hSAINT_score) |> 
+  dplyr::select(-hSAINT_class, -contam_class) |> 
+  dplyr::rename_with(.cols = c(!dplyr::contains('Protein')), ~paste0('protein_', .x))
+
+head(hSAINT)
+```
+
+
+```{r Second precompute Data Load, eval = TRUE, echo = FALSE}
+rm(IPMS_mat_log)
+rm(IPMS_mat_Z)
+```
+
+```{r, results='asis', echo=FALSE}
+fmt <- knitr::pandoc_to()
+
+if (identical(fmt, "html")) {
+  cat('# Cluster-Level Summaries {.tabset .tabset-pills .tabset-fade}\n')
+} else if (identical(fmt, "markdown")) {
+  cat('<details><summary><strong>Cluster-Level Summaries</strong></summary>\n')
+} else {
+  cat('# Cluster-Level Summaries\n')
+}
+```
+
+## Cluster Assignments
+
+Gather cluster-level summaries from both `hierarchical clustering` and 
+`HDBSCAN clustering`
+
+Summaries include:
+
+  + cluster size
+  + median `hSAINT` score
+  + contamination rate
+  + percentage of proteins not identified as contaminants
+  + sum of `hSAINT` scores
+  
+These metrics form the foundation for coherence analysis
+
+```{r Extract Cluster Info By Method}
+cluster_assignments <- hClust_protein_cluster_df |> 
+  dplyr::mutate(method = 'hClust', .before = Protein) |> 
+  dplyr::full_join(
+    HDBSCAN_protein_cluster_df |> 
+      dplyr::mutate(method = 'HDBSCAN', .before = Protein)
+  ) |> 
+  dplyr::relocate(protein_stat_class, .after = cluster_class) |> 
+  dplyr::group_by(method, Protein) |> 
+  dplyr::arrange(Protein, method, protein_contam_flag, desc(protein_hSAINT_score))
+```
+
+
+```{r Cluster Summaries}
+cluster_df <- cluster_assignments |> 
+  dplyr::distinct(method, Protein, cluster, cluster_size, protein_hSAINT_score, protein_contam_flag) |> 
+  dplyr::group_by(method, cluster) |> 
+  dplyr::summarize(
+    cluster_size = dplyr::n(),
+    cluster_median_hSAINT_score = stats::median(protein_hSAINT_score, na.rm= T),
+    cluster_mean_hSAINT_score = mean(protein_hSAINT_score,na.rm = T),
+    cluster_contam_perc = (sum(protein_contam_flag)/cluster_size)*100,
+    cluster_clean_fraction = (sum(protein_contam_flag == 0)/cluster_size)*100,
+    cluster_hSAINT_score_mass = sum(protein_hSAINT_score, na.rm = T),
+    cluster_clean_hSAINT_score_mass = sum(protein_hSAINT_score[protein_contam_flag == 0],na.rm = T )
+  ) |> 
+  dplyr::mutate(dplyr::across(c(is.double), ~round(.x, 2))) |> 
+  dplyr::arrange(dplyr::desc(cluster_clean_fraction), dplyr::desc(cluster_median_hSAINT_score))
+```
+
+```{r Show Cluster Summaries, echo = FALSE}
+DT::datatable(cluster_df, options = list(pageLength = 10))
+```
+
+## Plots
+
+```{r cluster_median_hSAINT_score_vs_clean_fraction}
+cluster_assignments |> 
+  dplyr::group_by(method, cluster) |> 
+  dplyr::distinct(cluster_size, cluster_median_hSAINT_score,
+                  cluster_contam_perc) |> 
+  dplyr::mutate(TMEM_Cluster = dplyr::case_when(cluster == 'noise' &
+                                                  method == 'HDBSCAN' ~ 'TMEM',
+                                                cluster == '12' &
+                                                  method == 'hClust' ~ 'TMEM',
+                                                TRUE ~ 'Not')) |> 
+  ggplot2::ggplot(aes(x = cluster_median_hSAINT_score,
+                      y = cluster_contam_perc, 
+                      color = cluster, 
+                      size = scale(cluster_size),
+                      shape = TMEM_Cluster)) +
+  ggplot2::geom_point() +
+  ggplot2::labs(title = 'Cluster median hSAINT Score vs Cluster "Clean" Fraction',
+                x = 'Cluster Median hSAINT Score',
+                y = 'Cluster Contamination Percentage (%)',
+                size = 'scale(cluster size)',
+                shape = 'Is TMEM Cluster') +
+  ggplot2::theme_bw() +
+  ggplot2::theme(title = ggplot2::element_text(face = 'bold', size = 12),
+                 axis.title = ggplot2::element_text(face = 'bold', size = 11),
+                 axis.text = ggplot2::element_text(face = 'bold', size = 10),
+                 legend.title = ggplot2::element_text(face = 'bold', size = 9),
+                 legend.text = ggplot2::element_text(face = 'bold', size = 8),
+                 strip.background = ggplot2::element_rect(fill = 'white', color = 'black'),
+                 strip.text = ggplot2::element_text(face = 'bold', size = 8)) +
+  ggplot2::facet_wrap(~method)
+```
+
+## Interpretation 
+
++ Bottom, right corners = "real biology"
++ Bottom, left corners = low hSAINT artifacts (keratins+)
++ Top = background; not candidates for GO enrichment
++ Middle = mixed clusters, containing some interesting proteins, but not coherent clusters
+
+```{r, results='asis', echo=FALSE}
+fmt <- knitr::pandoc_to()
+
+if (identical(fmt, "html")) {
+  cat('# Cluster-Level Coherence {.tabset .tabset-pills .tabset-fade}\n')
+} else if (identical(fmt, "markdown")) {
+  cat('<details><summary><strong>Cluster-Level Coherence</strong></summary>\n')
+} else {
+  cat('# Cluster-Level Coherence\n')
+}
+```
+
+## hClust
+
++ `hClust` produces **28** clusters
+
++ `TMEM184B` is in **Cluster 12**
+
++ Background appears to be distributed across clusters with low 
+`cluster_median_hSAINT_scores` with some common contaminants also appearing in 
+**Cluster 25** and **Cluster 1**
+
+```{r Show hClust Structure}
+cluster_assignments |>
+  dplyr::ungroup() |> 
+  dplyr::filter(method == 'hClust') |> 
+  dplyr::select(cluster, cluster_size, cluster_class, cluster_median_hSAINT_score) |> 
+  dplyr::inner_join(cluster_assignments |>
+                        dplyr::ungroup() |> 
+                        dplyr::distinct(method, Protein, cluster) |> 
+                        tidyr::pivot_wider(
+                          id_cols = Protein,
+                          names_from = method,
+                          values_from = cluster
+                          ) |> 
+                        dplyr::count(hClust, HDBSCAN, name = 'n_overlap_with_HDBSCAN_clusters') |> 
+                        dplyr::mutate(cluster = hClust) |> 
+                        dplyr::rename(hClust_cluster = hClust, HDBSCAN_cluster = HDBSCAN)) |> 
+  dplyr::select(-hClust_cluster)
+```
+
+## HDBSCAN
+
++ `hClust` produces **47** clusters
+
++ `TMEM184B` is in the **noise** cluster
+
++ Background appears to be consolidated within **Cluster 47**, though contaminants 
+populate other high-scoring `hSAINT` clusters
+
+```{r Show HDBSCAN Structure}
+cluster_assignments |> 
+  dplyr::ungroup() |> 
+  dplyr::filter(method == 'HDBSCAN') |> 
+  dplyr::select(cluster, cluster_size, cluster_class, cluster_median_hSAINT_score) |> 
+  dplyr::inner_join(cluster_assignments |>
+                        dplyr::ungroup() |> 
+                        dplyr::distinct(method, Protein, cluster) |> 
+                        tidyr::pivot_wider(
+                          id_cols = Protein,
+                          names_from = method,
+                          values_from = cluster
+                          ) |> 
+                        dplyr::count(hClust, HDBSCAN, name = 'n_overlap_with_hClust_clusters') |> 
+                        dplyr::mutate(cluster = HDBSCAN) |> 
+                        dplyr::rename(HDBSCAN_cluster = HDBSCAN, hClust_cluster = hClust)) |> 
+  dplyr::select(-HDBSCAN_cluster)
+```
+
+## Cross-Method Comparison
+
+```{r Cross Method Comparison Mapping hClust Clusters to HDBSCAN}
+# stable cluster projections:
+  # how well do hClust clusters map to HDBSCAN clusters?
+cluster_assignments |>
+    dplyr::ungroup() |> 
+    dplyr::distinct(method, Protein, cluster) |> 
+    tidyr::pivot_wider(
+      id_cols = Protein,
+      names_from = method,
+      values_from = cluster
+      ) |> 
+    dplyr::count(hClust, HDBSCAN, name = 'n_overlap') |> 
+  dplyr::group_by(hClust) |> 
+  dplyr::mutate(
+    total = sum(n_overlap),
+    frac = n_overlap / total
+  ) |> 
+  dplyr::slice_max(n_overlap, with_ties = F)
+```
+
+
+```{r Cross Method Comparison Mapping HDBSCAN Clusters to hClust}
+  # how well do HDBSCAN clusters map to hClust clusters?
+cluster_assignments |>
+    dplyr::ungroup() |> 
+    dplyr::distinct(method, Protein, cluster) |> 
+    tidyr::pivot_wider(
+      id_cols = Protein,
+      names_from = method,
+      values_from = cluster
+      ) |> 
+    dplyr::count(hClust, HDBSCAN, name = 'n_overlap') |> 
+  dplyr::group_by(HDBSCAN) |> 
+  dplyr::mutate(
+    total = sum(n_overlap),
+    frac = n_overlap / total
+  ) |> 
+  dplyr::slice_max(n_overlap, with_ties = F)
+```
+
+## Interpretation
+
+Many `hClust` clusters map primarily to the `HDBSCAN` noise/background clusters 
+(**"noise"**, **47**)
+
+  + this is what `HDBSCAN` is designed to do
+    + i.e. dense pockets as clusters, label everything else as noise
+    
+  + these are low-`hSAINT score`-signal `hClust` clusters and with contaminants
+  
+The **TMEM** `hClust` cluster (**Cluster 12**), which had no significantly enriched GO terms
+and a very small `cluster median hSAINT score`, is classified in the 
+`low-hSAINT, low-contamination` quadrant with no significantly enriched GO terms
+
+These proteins map to the **noise Cluster** under `HDBSCAN`, a comparatively much larger (**2903** vs **161**) 
+`high-hSAINT, high-contamination` background cluster
+
+This mapping reflects geometric density behavior rather than biological similarity:
+
+  + `TMEM` proteins are low-signal and sparse, and `HDBSCAN` assigns such points
+  to the nearest dense region rather than forming a separate cluster
+
+```{r}
+
+```
+
+```{r, results='asis', echo=FALSE}
+fmt <- knitr::pandoc_to()
+
+if (identical(fmt, "html")) {
+  cat('# GO Enrichment {.tabset .tabset-pills .tabset-fade}\n')
+} else if (identical(fmt, "markdown")) {
+  cat('<details><summary><strong>GO Enrichment</strong></summary>\n')
+} else {
+  cat('# GO Enrichment\n')
+}
+```
+
+
+```{r, results='asis', echo=FALSE}
+fmt <- knitr::pandoc_to()
+
+if (identical(fmt, "html")) {
+  cat('# Semantic Coherence {.tabset .tabset-pills .tabset-fade}\n')
+} else if (identical(fmt, "markdown")) {
+  cat('<details><summary><strong>Semantic Coherence</strong></summary>\n')
+} else {
+  cat('# Semantic Coherence\n')
+}
+```
