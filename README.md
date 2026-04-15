@@ -1,7 +1,10 @@
  <!-- badges: start -->
-  ![R-CMD-check](https://github.com/eriklarsen4/Endo/actions/workflows/R-CMD-check.yaml/badge.svg)
   ![Static Badge](https://img.shields.io/badge/MBNeuroLab-darkblue)
   ![R](https://img.shields.io/badge/r-%23276DC3.svg?style=for-the-badge&logo=r&logoColor=white)
+  ![Python version](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
+  ![R package check](https://github.com/eriklarsen4/Endo/actions/workflows/r-package-check.yml/badge.svg)
+  ![Python package check](https://github.com/eriklarsen4/Endo/actions/workflows/python-tests.yml/badge.svg)
+  
  <!-- badges: end -->
 
 **Endo**
