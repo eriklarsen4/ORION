@@ -346,7 +346,7 @@ Each stage is modular and can be run independently or integrated into a full pip
 
 ### Minimal usage example
 
-The following pseudocode illustrates a typical usage pattern. Replace --- with real backticks after pasting into your Python script.
+The following pseudocode illustrates a typical usage pattern.
 
 ```python
 from saint.io.data_input import load_data
@@ -369,7 +369,7 @@ tau_grid_results = run_tau_grid(input_data=bait_matrix, tau_grid=[0.1, 0.5, 1.0,
 
 # Pipeline-level diagnostics
 plot_gamma3_density(hierarchical_results)
-```python
+```
 
 This example demonstrates the modularity of the package: each layer (io, model, pipeline, diagnostics) is cleanly separated and can be used independently.
 

@@ -48,7 +48,7 @@ rm(tidied_puncta_data)
 <span style="color:black;font-size: 18px">Code chunks that clean the raw
 data from separate Excel sheets into the data object,
 `tidied_puncta_data`, have been included in the [R Markdown
-vignette](https://github.com/eriklarsen4/Endo/blob/dev/vignettes/FIREpHly.Rmd)</span>
+vignette](https://github.com/eriklarsen4/Endo/Rpkg/vignettes/FIREpHly.Rmd)</span>
 
 ### Visualize
 
@@ -57,62 +57,62 @@ of measured variables</span>
 
 #### Puncta Area Histogram
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Area%20Histogram%20full-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Area%20Histogram%20full-1.jpeg)<!-- -->
 
 #### Puncta Area Histogram (zoom)
 
 <span style="color:black;font-size: 16px">Crop to better-discern
 differences in the majority of the data</span>
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Area%20Histogram%20cropped-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Area%20Histogram%20cropped-1.jpeg)<!-- -->
 
 #### Puncta Area Density
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Area%20Density%20full-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Area%20Density%20full-1.jpeg)<!-- -->
 
 #### Puncta Area Density (zoom)
 
 <span style="color:black;font-size: 16px">Crop to better-discern
 differences in the majority of the data</span>
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Area%20Density%20cropped-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Area%20Density%20cropped-1.jpeg)<!-- -->
 
 #### Puncta Area Violin
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Area%20Violin-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Area%20Violin-1.jpeg)<!-- -->
 
 #### Puncta Acidity Histogram
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Acidity%20Histogram%20full-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Acidity%20Histogram%20full-1.jpeg)<!-- -->
 
 #### Puncta Acidity Histogram (zoom)
 
 <span style="color:black;font-size: 16px">Crop to better-discern
 differences in the majority of the data</span>
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Acidity%20Histogram%20cropped-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Acidity%20Histogram%20cropped-1.jpeg)<!-- -->
 
 #### Puncta Acidity Density
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Acidity%20Density%20full-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Acidity%20Density%20full-1.jpeg)<!-- -->
 
 #### Puncta Acidity Density (zoom)
 
 <span style="color:black;font-size: 16px">Crop to better-discern
 differences in the majority of the data</span>
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Acidity%20Density%20cropped-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Acidity%20Density%20cropped-1.jpeg)<!-- -->
 
 #### Puncta Area and Acidity Contour
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Area%20and%20Acidity%202d%20density%20full-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Area%20and%20Acidity%202d%20density%20full-1.jpeg)<!-- -->
 
 #### Puncta Area and Acidity Contour (zoom)
 
 <span style="color:black;font-size: 16px">Crop to better-discern
 differences in the majority of the data</span>
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Area%20and%20Acidity%202d%20density%20cropped-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Area%20and%20Acidity%202d%20density%20cropped-1.jpeg)<!-- -->
 
 ### Statistics
 
@@ -401,7 +401,7 @@ Puncta_data |>
   scale_fill_manual(values = c('navy', 'darkgoldenrod3'))
 ```
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Cell%20Body%20Area%20lm%20residuals%20dist-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Cell%20Body%20Area%20lm%20residuals%20dist-1.jpeg)<!-- -->
 
 <span style="color:darkred;font-size: 18px">The residual average cell
 body size for each mouse is not the same between genotypes</span>
@@ -418,7 +418,7 @@ Puncta_data |> dplyr::distinct(Cell_Body_Area) |>
   labs(x = expression(paste("Cell Body Area (", mu, m^2, ")")))
 ```
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Cell%20Body%20Area%20density-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Cell%20Body%20Area%20density-1.jpeg)<!-- -->
 
 <span style="color:darkred;font-size: 18px">Negative binomial.
 Unsurprising, particularly for small sample sizes; the borderline
@@ -554,7 +554,7 @@ below)</span>
 
 #### Cell Body Area vs Avg Puncta Area scatter w/fit
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Cell%20Body%20Area%20Scatter%20w%20lm%20fit-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Cell%20Body%20Area%20Scatter%20w%20lm%20fit-1.jpeg)<!-- -->
 
 #### Cell Body Area vs Avg Puncta Area summary
 
@@ -614,23 +614,23 @@ results</span>
 
 #### Puncta Acidity Bar
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Acidity%20Bar-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Acidity%20Bar-1.jpeg)<!-- -->
 
 #### Puncta Area Bar
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Area%20Bar-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Area%20Bar-1.jpeg)<!-- -->
 
 #### Puncta Number Bar
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Puncta%20Number%20Bar-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Puncta%20Number%20Bar-1.jpeg)<!-- -->
 
 #### Cell Body Area Bar (Welch’s t)
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Cell%20Body%20Area%20Welch%20Bar-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Cell%20Body%20Area%20Welch%20Bar-1.jpeg)<!-- -->
 
 #### Cell Body Area Bar (glm)
 
-![](https://github.com/eriklarsen4/Endo/blob/dev/FIREpHly_plots/Cell%20Body%20Area%20Gamma%20Bar-1.jpeg)<!-- -->
+![](https://github.com/eriklarsen4/Endo/analysis/R/FIREpHly_plots/Cell%20Body%20Area%20Gamma%20Bar-1.jpeg)<!-- -->
 
 ### Results Tables
 
