@@ -1,88 +1,13 @@
-^renv$
-#^../python/
-#^../Dockerfile
-#^../entrypoint\.sh
-#^../FIREpHly_plots/
-#^../IPMS_plots/
-#^../renv/
-#^../renv\.lock
-#^../\.Rprofile
-#^../\.Rhistory
-#^../\.github/
-#^../README\.md
-#^../Endo_1\.0\.0\.zip
-#^../Endo\.Rproj
-#^.*\.Rproj$
-#^\.Rproj\.user$
-
-
-# Ignore everything outside the R package structure
-^\.git$
-^\.github$
-^\.gitignore$
-^\.gitattributes$
-^\.gitmodules$
-^coherence_internal\.md$
-^coherence\.md4
-
-# Python package and related files
-^python/
-^.*\.py$
-^.*\.pyc$
-^__pycache__/
-
-# Docker and containerization
-^Dockerfile$
-^docker/
-^.*\.dockerignore$
-^entrypoint\.sh$
-
-# CI / GitHub Actions
-^\.github/
-^.*\.yml$
-^.*\.yaml$
-
-# Project-level files not part of the R package
-^README\.md$
-^README\.Rmd$
-^LICENSE$
-^LICENSE\.md$
-^Makefile$
-^renv/
-^renv\.lock$
-^\.Rproj\.user$
 ^.*\.Rproj$
-
-# Analysis, notebooks, and scratch directories
-^analysis/
-^notebooks/
-^reports/
-^scratch/
-^tmp/
-^temp/
-^analysis/.*\.md$
-^analysis/.*\.html$
-
-# Build artifacts
-^.*\.tar\.gz$
-^.*\.Rcheck$
-^.*\.o$
-^.*\.so$
-^.*\.dll$
-
-# VSCode / IDE noise
-^\.vscode/
-^\.idea/
-
-# macOS / OS noise
-^\.DS_Store$
-^\.AppleDouble$
-^\.LSOverride$
-
-# Python virtual environments
-^venv/
-^env/
-^\.venv/
-
-# Logs
-^.*\.log$
+^\.Rproj\.user$
+^renv$
+^renv\.lock$
+^vignettes/.*\.Rmd$
+^\.github$
+^analysis$
+^docker$
+^python$
+^tests$
+  
+^\.positai$
+^\.claude$

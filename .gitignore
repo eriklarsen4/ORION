@@ -48,3 +48,5 @@ reports/
 scratch/
 tmp/
 temp/
+.Rproj.user
+.positai

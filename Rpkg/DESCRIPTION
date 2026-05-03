@@ -1,50 +1,22 @@
-Package: Endo
+Package: orion
 Type: Package
-Title: Downstream Data Analysis Functions for NGS and Microscopy Data
-Version: 1.0.0
-Authors@R: c(person("Erik", "Larsen",
-                    email = "eriklarsen@arizona.edu",
-                    role = c("cre", "aut"),
-                    comment =  c(ORCID = '0000-0002-5878-1538')))
-Maintainer: Erik Larsen <eriklarsen@arizona.edu>
-Description: Documentation of IPMS-MS data wrangling in TSC format obtained from
-  University of Arizona's College of Molecular Medicine's Orbitrap. IPMS-MS data
-  is "post-discovery" of all unlabeled peptide-ion fragments-- fragments were
-  statistically assigned parent peptides and queried against protein sequence
-  databases; number of spectra uniquely identified as belonging to a given
-  protein were quantified as total spectral counts. TSCs were used for
-  downstream analysis. Package also documents confocal fluorescence microscopy
-  data wrangling and statistical analysis. Package relies on a lab-developed
-  package with functions to more easily identify biologically meaningful results
-  of downstream analyses of lists of genes/proteins obtained from NGS analysis.
-License: MIT
+Title: Data and Coherence Framework for the ORION Project
+Version: 0.0.0.9000
+Authors@R: 
+    c(
+      person(
+        given = "Erik",
+        family = "Larsen",
+        email = "erik_larsen4@yahoo.com",
+        role = c("aut", "cre"),
+        comment = c(ORCID = "0000-0002-5878-1538")
+      )
+    )
+Maintainer: Erik Larsen <erik_larsen4@yahoo.com>
+Description: Provides data objects and minimal R infrastructure associated with the ORION project. This package serves as a lightweight container for experiment metadata, processed datasets, and documentation used in downstream analyses. No modeling or computational routines are included.
+License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
-Imports: 
-  tidyverse,
-  dplyr,
-  tidyr,
-  ggplot2,
-  ggtext,
-  ggsignif,
-  emmeans,
-  readr,
-  broom,
-  DT,
-  stringr,
-  rstatix,
-  forcats,
-  lme4
-RoxygenNote: 7.3.1
-Depends: 
-    R (>= 4.1.0)
-Suggests: 
-    knitr,
-    rmarkdown,
-    devtools,
-    rstatix,
-    testthat (>= 3.0.0),
-    spelling
-VignetteBuilder: knitr
-Config/testthat/edition: 3
-Language: en-US
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends: R (>= 2.10)
