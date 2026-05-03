@@ -1,3 +1,11 @@
+  <!-- badges: start -->
+  [![R-CMD-check](https://github.com/eriklarsen4/ORION/actions/workflows/r-check.yml/badge.svg)](https://github.com/eriklarsen4/ORION/actions/workflows/r-check.yml)
+  ![Static Badge](https://img.shields.io/badge/MBNeuroLab-darkblue)
+  ![R](https://img.shields.io/badge/r-%23276DC3.svg?style=for-the-badge&logo=r&logoColor=white)
+  ![PyPI](https://img.shields.io/badge/PyPI-not_yet_published-lightgrey?logo=pypi&logoColor=white)
+  ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
+  <!-- badges: end -->
+
 # ORION
 
 A unified repository for the ORION project, containing:
@@ -11,7 +19,7 @@ This repo provides a coherent structure for scientific modeling, data management
 ---
 
 ## Repository structure
-
+```text
 ORION/
 ├── Rpkg/                       # R package source (package name: orion)
 │   ├── R/
@@ -33,7 +41,7 @@ ORION/
 ├── data/                       # Raw or shared datasets (not package-internal)
 ├── analysis/                   # Rmds, notebooks, exploratory work
 └── README.md                   # This file
-
+```
 ---
 
 ## ORION R package (R)
