@@ -18,7 +18,8 @@ def summarize_tau_grid(tau_grid_result):
     """
     Summarize the results of the tau grid search for a single bait.
 
-    Parameters
+
+    PARAMETERS
     
     tau_grid_result : dict
         Output from run_tau_grid, containing:
@@ -30,7 +31,8 @@ def summarize_tau_grid(tau_grid_result):
                   pi : array (3,)
                   gamma : array (n, 3)
 
-    Returns
+    
+    RETURNS
     
     DataFrame
         One row per tau value, with:
@@ -76,7 +78,8 @@ def plot_tau_grid(df, best_tau, bait_name):
     """
     Create diagnostic plots for the tau grid search for a single bait.
 
-    Parameters
+
+    PARAMETERS
     
     df : DataFrame
         Output of summarize_tau_grid, one row per tau.
@@ -87,7 +90,8 @@ def plot_tau_grid(df, best_tau, bait_name):
     bait_name : str
         Name of the bait for labeling.
 
-    Returns
+
+    RETURNS
     
     matplotlib.figure.Figure
         Figure containing the 2×2 grid of diagnostics.

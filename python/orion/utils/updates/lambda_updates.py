@@ -42,11 +42,11 @@ def update_lambda2(X, gamma):
     return np.clip(lambda2, 1e-6, 1e6)
 
 
-# %% Hierarchical lambda updates
+# %% IRIS lambda updates
 
-def update_lambda_hierarchical(X, gamma, alpha, tau):
+def update_lambda_iris(X, gamma, alpha, tau):
     """
-    Hierarchical lambda updates for all three components.
+    IRIS lambda updates for all three components.
 
     Each lambda is a component-specific (background, noise, and signal) Poisson rate per prey.
     alpha is the shape parameter of the Gamma prior on each lambda.

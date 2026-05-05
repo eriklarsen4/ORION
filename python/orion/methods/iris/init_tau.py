@@ -15,10 +15,14 @@ def init_tau():
     """
     Initialize tau for the hierarchical model.
     
-    Parameters
+    
+    PARAMETERS
+    
     None
     
-    Returns
+    
+    RETURNS
+    
     A scalar initial value for tau
     """
     return 1.0
@@ -28,11 +32,15 @@ def update_tau(lambdas, alpha):
     """
     Update tau using a closed form expression under a Gamma prior.
     
-    Parameters
+    
+    PARAMETERS
+    
     lambdas is a list of three arrays, one per component
     alpha is an array of length three with Gamma shape parameters
     
-    Returns
+    
+    RETURNS
+    
     A scalar updated value for tau
     """
 

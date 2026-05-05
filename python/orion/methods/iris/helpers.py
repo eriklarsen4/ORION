@@ -9,16 +9,20 @@ Created on Tue Feb 17 13:08:00 2026
 
 import numpy as np
 
-# %% Hyperparameter builder for hierarchical SAINT
+# %% Hyperparameter builder for IRIS
 
-def build_hyperparams_hierarchical(X):
+def build_hyperparams(X):
     """
-    Build initial hyperparameters for hierarchical SAINT.
+    Build initial hyperparameters for IRIS.
     
-    Parameters
+    
+    PARAMETERS
+    
     X is an array with shape n_preys by n_conditions
     
-    Returns
+    
+    RETURNS
+    
     A dictionary with initial lambda values, pi values, and alpha
     """
 

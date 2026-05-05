@@ -8,11 +8,11 @@ Created on Tue Mar  3 13:08:34 2026
 # %% Imports
 import numpy as np
 
-# %% Hierarchical EM wrapper
-def run_em_hierarchical(
+# %% IRIS EM wrapper
+def run_em(
     X,
     hyperparams,
-    biological_bait,
+    bait_unit,
     max_iter=200,
     tol_loglik=1e-6,
     tol_params=1e-6,
@@ -67,14 +67,14 @@ def run_em_hierarchical(
     with π_k ≥ 0 and π_1 + π_2 + π_3 = 1. These proportions specify how 
     frequently each component occurs across prey proteins.
     
+    
     LATENT COMPONENTS
     
-    Each component k has its own Poisson rate vector:
+    Each component k has its own prey-specific Poisson rate vector:
 
-        λ_k = (λ_{k1}, …, λ_{kr})
+        λ_k = (λ_{k1}, …, λ_{kn})
 
-    where λ_{kj} is the Poisson rate associated with replicate sample j of the 
-    given bait_unit. The index j is the same replicate index used in X_{ij}. 
+    where λ_{ki} is the Poisson rate associated with prey i under component k.
     The three components differ only in their rate vectors and represent:
 
         • Component 1 (index 0): background or non-interactor
@@ -83,12 +83,21 @@ def run_em_hierarchical(
     
     
     GENERATIVE MODEL
-    
-    For each prey i:
-        1. draw a component label z_i ∈ {1,2,3} with probability π_k
-        2. generate each measurement X_{ij} from Poisson(λ_{kj})
-    
-    The mixture proportions enter the E-step through log(π_k)
+
+    This section describes the probabilistic model IRIS fits. It defines the
+    likelihood used in the EM-like algorithm. The process does not draw samples
+    from this model; it evaluates the likelihood implied by it.
+
+    IRIS uses a collapsed Poisson formulation. For each prey i:
+
+        1. compute the collapsed count X_i• = ∑_j X_{ij} across replicates
+        2. draw a component label z_i ∈ {1,2,3} with probability π_k
+        3. generate X_i• from Poisson(r * λ_{k,i})
+
+    This collapsed formulation is equivalent to assuming replicate-specific
+    Poisson rates that are equal within a component and integrating out the
+    replicate dimension. The mixture proportions enter the E-step through
+    log(π_k).
     
     
     RESPONSIBILITIES

@@ -7,7 +7,7 @@ Created on Tue Mar  3 12:48:36 2026
 
 # %% Imports
 import numpy as np
-from orion.methods.iris.hierarchical_em_wrapper import run_em_hierarchical
+from orion.methods.iris.em_wrapper import run_em
 
 # %% Tau grid parameters
 COARSE_MIN = -1.0
@@ -23,16 +23,17 @@ def run_tau_grid(X, hyperparams, bait_unit):
     Perform a two-stage grid search over the global shrinkage hyperparameter, tau,
     for a single bait_unit. The function evaluates a coarse log-spaced grid followed
     by a refinement grid centered on the best coarse-grid tau. For each tau value,
-    the hierarchical EM algorithm is run to convergence and all model outputs and
+    the IRIS algorithm is run to convergence and all model outputs and
     diagnostics are recorded.
     
     Tau selection is performed only after both grid stages have been evaluated.
     Instead of choosing the tau with the single highest final log-likelihood
     (argmax), the function identifies all tau values whose final log-likelihood is
     within a small tolerance of the maximum, and selects the smallest tau among
-    these near-optimal candidates. This prevents runaway selection of extreme tau
-    values that can arise from the interaction between hierarchical shrinkage and
-    empirical-Bayes updates.
+    these near-optimal candidates. This prevents runaway selection of extreme 
+    tau values that can arise from the interaction between hierarchical 
+    shrinkage and the collapsed Poisson likelihood.
+
     
     Parameters
     
@@ -41,7 +42,7 @@ def run_tau_grid(X, hyperparams, bait_unit):
         and each column corresponds to a replicate measurement.
     
     hyperparams : dict
-        Hyperparameters for the hierarchical EM model. Any missing entries are
+        Hyperparameters for the IRIS model. Any missing entries are
         filled internally by the EM wrapper. Only the "tau" entry is modified
         during the grid search; all other hyperparameters remain unchanged.
     
@@ -101,7 +102,7 @@ def run_tau_grid(X, hyperparams, bait_unit):
         hyper = dict(hyperparams)
         hyper["tau"] = float(tau)
     
-        result = run_em_hierarchical(
+        result = run_em(
             X=X,
             hyperparams=hyper,
             bait_unit=bait_unit,
@@ -159,7 +160,7 @@ def run_tau_grid(X, hyperparams, bait_unit):
         hyper = dict(hyperparams)
         hyper["tau"] = float(tau)
     
-        result = run_em_hierarchical(
+        result = run_em(
             X=X,
             hyperparams=hyper,
             bait_unit=bait_unit,

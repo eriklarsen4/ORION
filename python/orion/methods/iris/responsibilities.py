@@ -22,14 +22,22 @@ def compute_responsibilities(
     """
     Compute responsibilities for a three-component Poisson mixture ("background", "noise", "signal").
 
-    Each lambda is a component-specific Poisson rate for each prey (protein).
-    pi is the vector of mixture proportions for the three components.
-    gamma represents the posterior probability that each prey belongs
-    to each component.
 
-    X is prey by experiment.
-    lambda1, lambda2, lambda3 are vectors with prey-specific rates.
-    pi is a vector (length of three) of mixture weights.
+    PARAMETERS
+    
+    X: prey-level count matrix by bait_unit (treatment/condition/tag + replicate)
+    lambda1: prey-level Poisson rate for background component
+    lambda2: prey-level Poisson rate for noise/ambiguous component
+    lambda3: prey-level Poisson rate for signal/true interactor component
+    pi: vector of mixture proportions for the three components.
+    
+    
+    RETURNS
+    
+    gamma: array represents the posterior probability that each prey belongs
+    to each component (gamma1: pp for background component
+                       gamma2: pp for noise/ambiguous component
+                       gamma3: pp for signal/true interactor component).
     """
 
     rate1 = lambda1[:, None]

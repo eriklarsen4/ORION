@@ -16,8 +16,15 @@ def poisson_logpmf(x, lam):
     """
     Compute the log of the Poisson probability mass function.
 
+
+    PARAMETERS
+    
     x is the observed count for each prey (protein).
     lam is the Poisson rate parameter for each prey (protein).
+    
+    RETURNS 
+    
+    log of the Poisson pmf for a given parameter set
     """
 
     eps = 1e-12
@@ -42,9 +49,14 @@ def compute_loglik(
     The log likelihood is the sum over preys (proteins) of the log of the
     mixture-weighted Poisson likelihood.
 
-    X has shape n_preys by n_conditions.
-    lambda1, lambda2, and lambda3 are each prey-specific rate vectors.
-    pi is a vector (length of three) of mixture weights.
+
+    PARAMETERS
+    
+    X bait_unit matrix; has shape n_preys by n_conditions.
+    lambda1: prey-specific rate vector for background component
+    lambda2: prey-specific rate vector for noise/ambiguous component
+    lambda3: prey-specific rate vector for signal/true interactor component
+    pi: a vector (length of three for each component) of mixture weights
     """
 
     x_sum = X.sum(axis=1)

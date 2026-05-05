@@ -1,463 +1,382 @@
-# SAINT (Python)
+# ORION Python package
 
-Statistical Analysis of Interactomes with Explicit, Reproducible EM Models.  
-A modular, research‑grade Python implementation of classical and hierarchical EM models for AP‑MS data, with tau‑grid tuning, diagnostics, and a fully explicit architecture.
+The ORION Python package implements two related probabilistic models for analyzing interaction signal in bait‑specific experiments:
+
+- SAINT — Significance Analysis of INTeractome  
+- IRIS — Inference of Regularized Interaction Signals  
+
+SAINT provides a classical two‑component Poisson mixture baseline.  
+IRIS is a hierarchical, regularized three‑component Poisson mixture model that produces stabilized, biologically meaningful per‑prey posterior probabilities.
+
+This README gives both a modeler‑level mathematical description and a biologist/user‑level interpretation.
 
 ---
 
-## Package Structure
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-The Python package lives under ---python/saint/--- and is organized into explicit, modular components:
-
+## Package layout
 ```text
-saint/
-    __init__.py
-
-    diagnostics/
-        diagnostics.py
-        diagnostics_classical.py
-        diagnostics_hierarchical.py
-        diagnostics_pipeline.py
-        diagnostics_tau_grid.py
-        parameter_trajectories.py
-        __init__.py
-
-    io/
-        data_input.py
-        __init__.py
-
-    model/
-        classical_em_wrapper.py
-        classical_likelihood.py
-        classical_responsibilities.py
-        hierarchical_em_wrapper.py
-        hierarchical_likelihood.py
-        hierarchical_responsibilities.py
-        hierarchical_tau_grid.py
-        init_tau.py
-        __init__.py
-
-        updates/
-            lambda_updates.py
-            pi_updates.py
-            tau_updates.py
-            __init__.py
-
-    pipeline/
-        classical_saint.py
-        helpers_hierarchical.py
-        hierarchical_saint.py
-        __init__.py
-
-    tests/
-        test_classical_em_wrapper.py
-        test_classical_pipeline.py
-        test_classical_responsibilities.py
-        test_compute_loglikelihood_classical.py
-        test_compute_loglikelihood_hierarchical.py
-        test_data_input.py
-        test_diagnostics_classical.py
-        test_diagnostics_hierarchical.py
-        test_extract_bait_matrix.py
-        test_hierarchical_em_wrapper.py
-        test_hierarchical_pipeline.py
-        test_hierarchical_responsibilities.py
-        test_package_integrity.py
-        test_validate_hyperparams.py
-        _roadmap_future_tests.md
-        __init__.py
-
-    validation/
-        validate_hyperparams.py
-        __init__.py
+    python/
+    └── orion/
+        ├── methods/
+        │   ├── saint/
+        │   └── iris/
+        └── utils/
 ```
+You typically interact with:
 
-</details>
-
-## Classical Model
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-### Two-component Poisson mixture
-
-The classical model assumes each prey belongs to one of two latent components:
-
-- Component 1 (background) — Poisson rate lambda1  
-- Component 2 (signal) — Poisson rate lambda2  
-
-Mixing proportions:
-
-- pi1, pi2
-
-Posterior membership probabilities:
-
-- gamma1, gamma2 per prey
-
-The classical EM wrapper estimates:
-
-- lambda1, lambda2  
-- pi1, pi2  
-- gamma1, gamma2  
-
-All intermediate variables use explicit, component-indexed names for clarity and symmetry with the hierarchical model.
-
-### Classical diagnostics include:
-
-- log-likelihood trajectory  
-- lambda1 and lambda2 trajectories  
-- pi1 and pi2 trajectories  
-- gamma1 and gamma2 distributions  
-- parameter trajectory plots via parameter_trajectories.py  
-
-</details>
-
-## Hierarchical Model
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-### Three-component Poisson–Gamma mixture with empirical Bayes updates
-
-The hierarchical model extends the classical model by introducing a third latent component and Gamma priors on the Poisson rate parameters. Each prey belongs to one of three components:
-
-- Component 1 (background) — Poisson rate lambda1  
-- Component 2 (contaminant) — Poisson rate lambda2  
-- Component 3 (signal) — Poisson rate lambda3  
-
-Each component has a Gamma(a_k, b_k) prior on lambda_k, with hyperparameters updated via empirical Bayes.
-
-Mixing proportions:
-
-- pi1, pi2, pi3
-
-Posterior membership probabilities:
-
-- gamma1, gamma2, gamma3 per prey
-
-The hierarchical EM wrapper estimates:
-
-- lambda1, lambda2, lambda3  
-- pi1, pi2, pi3  
-- gamma1, gamma2, gamma3  
-- alpha1, alpha2, alpha3  
-- a1, a2, a3 and b1, b2, b3  
-
-The global shrinkage strength is controlled by:
-
-- tau (a scalar hyperparameter)
-
-### Hierarchical diagnostics include:
-
-- log-likelihood trajectory  
-- lambda1–3 trajectories  
-- pi1–3 trajectories  
-- alpha1–3, a1–3, b1–3 trajectories  
-- gamma1–3 distributions  
-- shrinkage behavior under different tau values  
-- parameter trajectory visualizations  
-
-These outputs help assess whether the hierarchical model is stable, well-calibrated, and biologically interpretable.
-
-</details>
-
-## Tau-grid Tuning
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-### Selecting the global shrinkage strength
-
-The hierarchical model includes a global hyperparameter:
-
-- tau (controls the strength of Gamma shrinkage on lambda1–3)
-
-Choosing tau affects:
-
-- the degree of shrinkage applied to lambda estimates  
-- separation between background, contaminant, and signal components  
-- stability of gamma3 (signal occupancy)  
-- overall robustness under sparse or noisy data  
-
-### The tau-grid tuner performs:
-
-1. Running the hierarchical EM model across a user-defined grid of tau values.  
-2. Recording final log-likelihood, lambda1–3, pi1–3, and mean gamma3 for each tau.  
-3. Identifying the tau that optimizes model fit and stability.  
-4. Producing a four-panel diagnostic figure summarizing the grid search.
-
-### Diagnostics include:
-
-- tau vs final log-likelihood  
-- tau vs lambda1–3  
-- tau vs pi1–3  
-- tau vs mean gamma3  
-
-These diagnostics help determine whether the model is under-shrunk, over-shrunk, or well-calibrated.
-
-</details>
-
-## Diagnostics Suite
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-### Three layers of model evaluation and visualization
-
-The diagnostics subpackage provides a comprehensive set of tools for evaluating model behavior, convergence, and biological interpretability. Diagnostics are organized into three conceptual layers:
+- `orion.methods.saint` — SAINT baseline model  
+- `orion.methods.iris` — IRIS regularized three‑component model  
+- `orion.utils` — shared utilities (I/O, summaries, etc.)
 
 ---
 
-### Classical diagnostics
+## Installation
 
-These diagnostics evaluate the two-component Poisson mixture model and include:
-
-- log-likelihood trajectory  
-- lambda1 and lambda2 trajectories  
-- pi1 and pi2 trajectories  
-- gamma1 and gamma2 distributions  
-- parameter trajectory visualizations via parameter_trajectories.py  
-
-These outputs help verify that the classical model converges cleanly and separates background from signal.
-
----
-
-### Hierarchical diagnostics
-
-These diagnostics evaluate the three-component Poisson–Gamma mixture model and include:
-
-- log-likelihood trajectory  
-- lambda1–3 trajectories  
-- pi1–3 trajectories  
-- alpha1–3, a1–3, b1–3 hyperparameter trajectories  
-- gamma1–3 distributions  
-- shrinkage behavior under different tau values  
-- parameter trajectory visualizations  
-
-These outputs help assess whether the hierarchical model is stable, well-calibrated, and biologically interpretable.
-
----
-
-### Pipeline-level diagnostics
-
-These diagnostics summarize results across all baits and include:
-
-- density of mean gamma3 across baits  
-- optional highlight of a positive control bait  
-- summary tables of mean gamma3 per bait  
-- cross-bait comparisons for signal occupancy  
-
-These outputs provide a global view of model performance across the entire interactome.
-
----
-
-### Diagnostic philosophy
-
-All diagnostics follow the same architectural principles:
-
-- explicit, component-indexed naming  
-- bait-explicit titles and labels  
-- no hidden defaults  
-- reproducible, transparent visualizations  
-- separation of classical, hierarchical, tau-grid, and pipeline layers  
-
-This ensures that every diagnostic figure or table is interpretable by collaborators and future maintainers.
-
-</details>
-
-## Naming Conventions
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-### Explicit, symmetric, algebraic naming
-
-All parameters and hyperparameters use explicit, component-indexed names to ensure clarity, symmetry, and interpretability:
-
-- lambda1, lambda2, lambda3  
-- pi1, pi2, pi3  
-- gamma1, gamma2, gamma3  
-- alpha1, alpha2, alpha3  
-- a1, a2, a3  
-- b1, b2, b3  
-
-Intermediate variables also follow explicit naming:
-
-- posterior_loglik_components  
-- stabilized_log_posterior_components  
-- posterior_membership_probabilities  
-- posterior_weighted_counts_componentk  
-- effective_membership_componentk  
-
-No shorthand is used anywhere in the package. Every variable name reflects the underlying algebraic quantity.
-
-</details>
-
----
-
-## Reproducibility and Architecture
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-### Transparent, modular, and future-proof
-
-The SAINT Python package enforces a strict architectural philosophy:
-
-- explicit separation of model parameters, hyperparameters, and control variables  
-- explicit component-wise naming across all layers  
-- bait-explicit labels and titles in all diagnostics  
-- no hidden defaults or implicit behavior  
-- reproducible initialization and deterministic EM updates  
-- clear segmentation using ---# %%--- markers for IDE navigation  
-- modular separation of classical, hierarchical, tau-grid, diagnostics, and pipeline layers  
-- no cross-layer leakage of logic or state  
-
-This architecture ensures that:
-
-- collaborators can understand and extend the code without inference  
-- future maintainers can trace every computation step  
-- scientific results are reproducible and transparent  
-- the package remains stable as new models or diagnostics are added  
-
-</details>
-
-## Workflow and Usage
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-### End-to-end workflow
-
-A standard analysis using the SAINT Python package proceeds through the following stages:
-
-1. Prepare input data using the io layer (data_input.py).  
-2. Run the classical or hierarchical EM model for each bait using the pipeline layer.  
-3. If using the hierarchical model, perform tau-grid tuning to select the optimal shrinkage strength.  
-4. Generate diagnostics at the classical, hierarchical, tau-grid, and pipeline levels.  
-5. Aggregate results into a final scoring table or ranked interactome.
-
-Each stage is modular and can be run independently or integrated into a full pipeline.
-
----
-
-### Minimal usage example
-
-The following pseudocode illustrates a typical usage pattern.
+From the repo root:
 
 ```python
-from saint.io.data_input import load_data
-from saint.pipeline.classical_saint import run_classical_saint
-from saint.pipeline.hierarchical_saint import run_hierarchical_saint
-from saint.model.hierarchical_tau_grid import run_tau_grid
-from saint.diagnostics.diagnostics_pipeline import plot_gamma3_density
-
-# Load and prepare data
-bait_matrix = load_data("path/to/input.csv")
-
-# Classical model
-classical_results = run_classical_saint(bait_matrix)
-
-# Hierarchical model
-hierarchical_results = run_hierarchical_saint(bait_matrix)
-
-# Tau-grid tuning
-tau_grid_results = run_tau_grid(input_data=bait_matrix, tau_grid=[0.1, 0.5, 1.0, 2.0])
-
-# Pipeline-level diagnostics
-plot_gamma3_density(hierarchical_results)
+    pip install -e python
 ```
 
-This example demonstrates the modularity of the package: each layer (io, model, pipeline, diagnostics) is cleanly separated and can be used independently.
+Then in Python:
+
+```python
+    from orion.methods.saint import saint
+    from orion.methods.iris import iris
+```
 
 ---
 
-### Notes on data formatting
+## SAINT: Significance Analysis of INTeractome
 
-The io layer expects:
+SAINT models observed spectral counts for a given bait‑specific experiment as arising from a two‑component Poisson mixture:
 
-- a bait-by-prey count matrix  
-- integer-valued spectral counts  
-- consistent bait naming  
-- no missing values  
 
-The data_input.py module includes helper functions for:
 
-- validating input structure  
-- extracting bait-specific matrices  
-- mapping identifiers  
-- preparing data for classical or hierarchical models  
+\[
+p(x_i \mid \Theta) = \pi_1 \, \text{Pois}(x_i \mid \lambda_1)
++ \pi_2 \, \text{Pois}(x_i \mid \lambda_2)
+\]
 
-</details>
 
-## Development Status
 
-<details>
-<summary><strong>Click to expand</strong></summary>
+where:
 
-### Current state of the Python package
+- \(\lambda_1\) is the background mean  
+- \(\lambda_2\) is the enriched mean  
+- \(\pi_1, \pi_2\) are mixture weights with \(\pi_1 + \pi_2 = 1\)
 
-The SAINT Python package is under active development and includes:
+SAINT produces continuous posterior probabilities for each prey belonging to background or enriched.  
+However, the **two‑component structure, itself,** introduces several limitations that affect interpretability and stability:
 
-- complete classical and hierarchical EM wrappers  
-- full likelihood, responsibility, and update modules  
-- tau-grid tuning functionality  
-- a comprehensive diagnostics suite  
-- a modular pipeline layer for end-to-end analysis  
-- a robust test suite covering all major components  
-- explicit naming conventions and reproducible architecture  
+- **Ambiguous signal distorts both components**  
+  Even though SAINT outputs continuous probabilities, it must explain all observations using only two latent states.  
+  Borderline or inconsistent counts therefore pull the background mean upward and the enriched mean downward, reducing the separation between them.  
+  This makes the posterior probability of belonging to the signal component less stable and less interpretable.
 
-The package is suitable for research-grade analysis and is designed for long-term maintainability.
+- **No hierarchical shrinkage**  
+  SAINT estimates \(\lambda_1\) and \(\lambda_2\) independently for each experiment.  
+  Experiments with sparse counts, replicate imbalance, or outliers can produce extreme or biologically implausible component means because there is no global expectation to stabilize them.
 
-</details>
+- **Unregularized mixture weights**  
+  The mixture weights \(\pi_1, \pi_2\) are updated purely from the data.  
+  In low‑information settings, one component can collapse to nearly zero weight, producing degenerate fits and unstable posteriors.
 
----
+- **Sensitivity to outliers and replicate imbalance**  
+  A single high count can inflate \(\lambda_2\), distorting responsibilities for all other preys.  
+  Without shrinkage or an intermediate component, SAINT cannot buffer against these distortions.
 
-## Future Improvements
-
-<details>
-<summary><strong>Click to expand</strong></summary>
-
-Planned enhancements include:
-
-- renaming validate_hyperparams.py to a more explicit and descriptive name  
-- expanding the diagnostics suite with additional cross-bait summaries  
-- adding more integration tests for pipeline-level workflows  
-- refining the tau-grid tuner for adaptive grid selection  
-- improving documentation and adding example notebooks  
-- expanding the io layer for additional data formats  
-
-These improvements will further strengthen reproducibility, clarity, and usability.
-
-</details>
+IRIS is designed specifically to address these structural limitations.
 
 ---
 
-## Contributing
+## IRIS: Inference of Regularized Interaction Signals
 
-<details>
-<summary><strong>Click to expand</strong></summary>
+IRIS is a three‑component hierarchical Poisson mixture model fit independently to each bait‑unit*.
+Its primary purpose is to produce **stabilized, biologically meaningful per‑prey posterior probabilities** that are less distorted by the behavior of other preys.  
+To achieve this, IRIS uses hierarchical priors (Gamma and Dirichlet) as regularizers within a maximum-likelihood EM-style alternating procedure to produce point estimates for parameters rather than full Bayesian posterior distributions.
+IRIS achieves this with:
 
-Contributions are welcome. The repository includes:
+- fixed global Gamma shrinkage on component means  
+- Dirichlet‑stabilized mixture weights  
+- three components: background, noise/ambiguous, signal  
 
-- a full test suite under ---saint/tests/---  
-- modular code organized by function and model layer  
-- explicit naming conventions and architectural guidelines  
+IRIS generalizes SAINT by:
 
-Contributors should follow the existing structure and naming discipline to maintain consistency across the package.
+- providing stabilized, biologically meaningful per‑prey posterior probabilities  
+- adding an intermediate component to prevent ambiguous proteins from distorting background and signal  
+- introducing hierarchical regularization via a global Gamma prior to stabilize component means  
+- stabilizing mixture weights with a Dirichlet prior to prevent component collapse  
+- improving robustness to sparse counts, outliers, and replicate imbalance  
 
-</details>
+
+*NOTE: A *bait‑unit* is the specific antibody-protein immunoprecipitation setup
+whose replicates share the same underlying interaction distribution.
+
+Concretely, a bait-unit corresponds to a particular antibody pulling down a 
+particular tagged or endogenous protein under a specific construct/condition, 
+with all its technical replicates grouped together.
+
+e.g. TP53-myc + all replicates = a bait-unit;
+     TP53 (endogenous) + all replicates = another bait-unit;
+     Control-protein-myc + all replicates = another bait-unit;
+     TP53-KO (endogenous) + all replicates = another bait-unit
+     
+IRIS fits one independent mixture model per bait-unit
+---
+
+## IRIS model architecture (modeler view)
+
+For a given bait‑specific experiment, IRIS models each collapsed prey count \(x_i = \sum_j X_{ij}\) as:
+
+
+
+\[
+p(x_i \mid \Theta) = \sum_{k=1}^{3} \pi_k \, \text{Pois}(x_i \mid \lambda_k)
+\]
+
+
+
+where:
+
+- \(k = 1,2,3\) correspond to background, noise/ambiguous, signal  
+- \(\lambda_k\) are component-specific Poisson means for collapsed counts
+- \(\pi_k\) are mixture weights with \(\sum_k \pi_k = 1\)
+
+### E‑step: responsibilities
+
+
+
+\[
+\gamma_{ik} =
+\frac{\pi_k \, \text{Pois}(x_i \mid \lambda_k)}
+{\sum_{j=1}^{3} \pi_j \, \text{Pois}(x_i \mid \lambda_j)}
+\]
+
+
+
+### M‑step: component means with global Gamma shrinkage
+
+IRIS applies a Gamma(\(\alpha, \tau\)) prior shared across experiments
+(These priors regularize the collapsed Poisson means, not replicate-specific rates):
+
+
+
+\[
+\lambda_k^{\text{new}} =
+\frac{\alpha + \sum_i \gamma_{ik} x_i}
+{\tau + \sum_i \gamma_{ik}}
+\]
+
+
+
+Biologically, this reflects the expectation that background, ambiguous, and enriched signal levels should fall within broadly similar ranges across experiments.  
+Shrinkage prevents sparse or noisy experiments from producing extreme or biologically implausible component means.
+
+### M‑step: mixture weights with Dirichlet stabilization
+
+Mixture weights represent the proportion of preys that are background, ambiguous, or enriched in an experiment.  
+IRIS updates them using a Dirichlet(\(\beta_1, \beta_2, \beta_3\)) prior:
+
+
+
+\[
+\pi_k^{\text{new}} =
+\frac{\beta_k + \sum_i \gamma_{ik}}
+{\sum_j \left(\beta_j + \sum_i \gamma_{ij}\right)}
+\]
+
+
+
+Stabilization prevents any component from collapsing to zero prevalence, ensuring that IRIS maintains meaningful component structure and can express uncertainty even in low‑information settings.
+
+### Per‑bait-unit independence
+
+IRIS fits this model independently for each bait‑unit, allowing:
+
+- experiment‑specific signal distributions  
+- experiment‑specific mixture weights  
+- shared global hyperparameters \(\alpha, \tau, \beta\) across experiments  
+
+---
+
+## Why IRIS improves upon SAINT
+
+IRIS introduces several structural enhancements that directly address SAINT’s limitations:
+
+- **Stabilized, biologically meaningful per‑prey posterior probabilities**  
+  IRIS prevents ambiguous or noisy proteins from disproportionately influencing the component parameters used to evaluate all other preys.  
+  This yields clearer separation between components and more reliable signal probabilities.
+
+- **Intermediate component for ambiguous signal**  
+  Absorbs borderline counts so they do not distort background or signal.
+
+- **Global hierarchical shrinkage**  
+  Encodes the biological expectation that background, ambiguous, and enriched signal levels should fall within broadly similar ranges across experiments.
+
+- **Dirichlet‑stabilized mixture weights**  
+  Ensures that all components remain viable and prevents collapse in low‑information settings.
+
+---
+
+## Per‑prey independence and why it matters
+
+The most important improvement of IRIS over SAINT is that IRIS provides **per‑prey, per‑bait-unit posterior probabilities** that are more stable and interpretable because they are less distorted by the behavior of other preys.
+
+In SAINT, all preys jointly determine only two global components (background and signal).  
+This means that background, noisy, and signal proteins all influence the same two component means and mixture weights.  
+As a result, ambiguous or inconsistent proteins can distort the estimates used for every other prey.
+
+IRIS does not mathematically isolate preys from each other — in fact, hierarchical shrinkage and mixture‑weight stabilization intentionally link preys by enforcing bait-unit-wide consistency.  
+However, IRIS **prevents any single prey (especially ambiguous or noisy ones) from disproportionately influencing the component parameters** that determine the posterior probabilities for all other preys.
+
+This yields clearer separation between components, more stable signal probabilities, and more biologically meaningful per‑prey estimates.
+
+---
+
+## IRIS interpretation (user & biologist view)
+
+IRIS separates observed spectral counts into three probabilistic signal categories:
+
+- background — noise, contaminants, non‑specific binders  
+- noise/ambiguous — borderline, inconsistent, or low‑confidence signal  
+- signal — strong, reproducible interaction signal  
+
+The algorithm iteratively:
+
+1. Estimates how likely each prey belongs to each signal category  
+2. Updates the definitions of those categories based on the data  
+3. Repeats until the assignments and parameters stabilize  
+
+### Per‑prey (per‑protein) estimates
+
+For each prey \(i\), IRIS provides:
+
+- a posterior probability vector  
+  
+
+\[
+  \gamma_i = \left(
+    \gamma_{i,\text{background}},
+    \gamma_{i,\text{ambiguous}},
+    \gamma_{i,\text{signal}}
+  \right)
+  \]
+
+
+- an optional classification by taking the most probable component  
+- a stabilized, biologically interpretable view of its interaction behavior that accounts for bait-unit-wide structure
+
+Downstream analyses typically focus on the posterior probability of belonging to the **signal** component, using the background and ambiguous components as context for uncertainty and noise.
+
+---
+
+## Usage examples
+
+### 1. Fitting IRIS to a single bait-unit (minimal example)
+
+```python
+    import numpy as np
+    from orion.methods.iris.em_wrapper import run_em
+    
+    # Spectral counts for a single bait-specific experiment
+    # X should be an (n_prey × r) matrix; if your data is 1D, reshape or load accordingly
+    X = np.load("counts.npy")  # shape: (n_prey, r)
+    
+    # Run the IRIS EM algorithm directly
+    fit = run_em(
+        X=X,
+        max_iter=200,
+        tol_loglik=1e-6,
+        tol_params=1e-6,
+        seed=1,
+        verbose=True,
+    )
+    
+    # Posterior probabilities for each component (background, ambiguous, signal)
+    gamma = fit["responsibilities"]  # shape: (n_prey, 3)
+    
+    # Component means and mixture weights
+    lambdas = fit["lambdas"]  # length 3
+    pis = fit["pis"]          # length 3
+```
+
+### 2. Fitting IRIS to all bait-units
+
+```python
+    from orion.methods.iris.pipeline import run_iris_pipeline
+    from orion.utils.io.data_input import load_bait_data
+    
+    # Load bait-specific spectral count data
+    # Returns a dictionary: bait → 1D array of prey counts
+    input_data = load_bait_data("path/to/input_directory")
+    
+    # Run the full IRIS pipeline
+    results = run_iris_pipeline(
+        input_data=input_data,
+        max_iter=200,
+        tol_loglik=1e-6,
+        tol_params=1e-6,
+        seed=1,
+        verbose=True,
+        make_plots=False,
+        save_results=True,
+        results_csv="iris_results.csv",
+    )
+    
+    # 'results' is a dictionary keyed by bait, containing:
+    # - posterior probabilities (n_prey × 3)
+    # - component means
+    # - mixture weights
+    # - tau-grid diagnostics (if enabled)
+
+```
+
+For comparison, a SAINT‑style two‑component fit might look like:
+
+```python
+    from orion.methods.saint.pipeline import run_classical_pipeline
+    from orion.utils.io.data_input import load_bait_data
+    
+    # Load bait-specific spectral count data
+    # Returns a dictionary: bait → 1D array of prey counts
+    input_data = load_bait_data("path/to/input_directory")
+    
+    # Run the classical SAINT pipeline
+    results = run_classical_pipeline(
+        input_data=input_data,
+        hyperparams=None,      # optional initialization values
+        make_plots=False,
+        plot_dir=None,
+        max_iter=200,
+        tol_loglik=1e-6,
+        tol_params=1e-6,
+        seed=1,
+        verbose=True,
+    )
+    
+    # 'results' is a dictionary keyed by bait, containing:
+    # - posterior probabilities (n_prey × 2)
+    # - component means (background, signal)
+    # - mixture weights
+    # - optional diagnostic plots (if enabled)
+```
+
+---
+
+## Audience guide
+
+- If you care about implementation and math → focus on the model architecture and EM update equations.  
+- If you care about biological interpretation → focus on the interpretation sections and the three signal categories.  
+- If you are comparing SAINT vs IRIS → note that IRIS:
+  - provides stabilized per‑prey posterior probabilities,  
+  - adds an intermediate component,  
+  - uses global shrinkage and Dirichlet stabilization,  
+  - and is designed as a theoretical and practical improvement over the SAINT two‑component mixture.
 
 ---
 
 ## License
 
-<details>
-<summary><strong>Click to expand</strong></summary>
+MIT License (see repository root).
 
-This project is distributed under an open-source license. See the top-level repository for details.
 
-</details>

@@ -6,7 +6,7 @@
   ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
   <!-- badges: end -->
 
-# ORION
+# ORION (Observed Relationship Inference of Organized Networks)
 
 A unified repository for the ORION project, containing:
 

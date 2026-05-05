@@ -7,7 +7,7 @@ Created on Tue Mar  3 16:37:51 2026
 
 # %% Imports
 import numpy as np
-from saint.model.hierarchical_tau_grid import run_tau_grid
+from orion.methods.iris.tau_grid import run_tau_grid
 
 
 # %% Tests
@@ -24,13 +24,11 @@ def test_tau_grid_runs_and_returns_expected_keys():
         "pi_init": np.array([0.5, 0.3, 0.2]),
     }
 
-    # A tiny tau grid
-    tau_values = [0.1, 0.5]
-
+    # Run tau grid
     results = run_tau_grid(
         X=X,
         hyperparams=hyperparams,
-        biological_bait="BAIT",
+        bait_unit="BAIT",
     )
 
     expected_keys = {

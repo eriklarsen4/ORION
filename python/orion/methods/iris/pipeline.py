@@ -10,11 +10,11 @@ import os
 import pandas as pd
 
 from orion.utils.io.data_input import load_bait_data
-from orion.methods.iris.hierarchical_tau_grid import run_tau_grid
-from orion.methods.iris.hierarchical_em_wrapper import run_em_hierarchical
+from orion.methods.iris.tau_grid import run_tau_grid
+from orion.methods.iris.em_wrapper import run_em
 
-from orion.methods.iris.diagnostics_hierarchical import (
-    make_hierarchical_plots,
+from orion.methods.iris.diagnostics import (
+    make_iris_plots,
     plot_gamma3_density,
 )
 from orion.methods.iris.diagnostics_tau_grid import (
@@ -22,7 +22,7 @@ from orion.methods.iris.diagnostics_tau_grid import (
 )
 
 
-def run_hierarchical_pipeline(
+def run_iris_pipeline(
     input_data,
     hyperparams=None,
     max_iter=200,
@@ -40,8 +40,8 @@ def run_hierarchical_pipeline(
     """
     Run the IRIS pipeline for all bait_units using a per-bait_unit tau grid
     search. This function accepts raw input_data from the user, converts it into
-    per-bait_unit replicate matrices using the data loader, applies the hierarchical
-    EM model with a two-stage tau grid for each bait_unit, selects the best-fitting
+    per-bait_unit replicate matrices using the data loader, applies the IRIS
+    model with a two-stage tau grid for each bait_unit, selects the best-fitting
     tau, and assembles a unified prey-level results table.
     
     Hyperparameters may be omitted entirely. If the user supplies no dictionary,
@@ -52,7 +52,8 @@ def run_hierarchical_pipeline(
     (max_iter, tol_loglik, tol_params, seed) are pipeline-level arguments and
     are not part of the hyperparameter dictionary.
     
-    Parameters
+    
+    PARAMETERS
     
     input_data : dict or DataFrame
         Raw IPMS data provided by the user. The pipeline calls the data loader
@@ -60,7 +61,7 @@ def run_hierarchical_pipeline(
         construct metadata including the per-bait_unit protein ordering.
     
     hyperparams : dict, optional
-        Optional hyperparameters for the hierarchical EM model. Users may supply
+        Optional hyperparameters for the IRIS model. Users may supply
         overrides, but any missing entries are filled with internal defaults
         before the model is run. The `tau` entry is overridden during the grid
         search; all other entries remain unchanged unless explicitly provided.
@@ -96,7 +97,8 @@ def run_hierarchical_pipeline(
         Directory in which to save .png files when save_plots is True. If
         save_plots is True and plot_dir is None, a ValueError is raised.
     
-    Returns
+    
+    RETURNS
     
     dict
         Unified results object containing:
@@ -121,12 +123,14 @@ def run_hierarchical_pipeline(
                     pi1, pi2, pi3,
                     gamma1, gamma2, gamma3
     
-    Model parameters
+    
+    MODEL PARAMETERS
     
     The model parameters lambda1, lambda2, lambda3, pi, and gamma are estimated
     by the EM algorithm and are not supplied by the user.
     
-    Hyperparameters
+    
+    HYPERPARAMTERS
     
     The hyperparameters alpha, a_k, b_k, and tau may be supplied in the
     hyperparameter dictionary but are not required. Any missing entries are
@@ -134,7 +138,8 @@ def run_hierarchical_pipeline(
     overridden by the grid search. All other hyperparameters remain unchanged
     unless explicitly provided.
     
-    Tau grid tuning parameters
+    
+    TAU GRID TUNING PARAMETERS
     
     The "coarse" and "refinement" grid ranges and resolutions define the search
     over tau. These are tuning parameters for the grid search procedure and are
@@ -164,6 +169,7 @@ def run_hierarchical_pipeline(
 
     
         # 1. Run tau grid
+        # X is an (n × r) replicate matrix; IRIS collapses replicates internally.
         tau_grid_result = run_tau_grid(
             X=X,
             hyperparams=hyperparams,
@@ -183,7 +189,8 @@ def run_hierarchical_pipeline(
         hyperparams_best = hyperparams.copy()
         hyperparams_best["tau"] = best_tau
     
-        best_em = run_em_hierarchical(
+        # EM is run on the collapsed Poisson model; replicates are summed internally.
+        best_em = run_em(
             X=X,
             hyperparams=hyperparams_best,
             bait_unit=bait_unit,
@@ -200,8 +207,8 @@ def run_hierarchical_pipeline(
             if save_plots and plot_dir is None:
                 raise ValueError("plot_dir must be provided when save_plots=True.")
     
-            # Hierarchical diagnostics (returns dict of figures)
-            figs_hier = make_hierarchical_plots(best_em, bait_unit)
+            # IRIS diagnostics (collapsed Poisson model)
+            figs_hier = make_iris_plots(best_em, bait_unit)
     
             # Tau-grid diagnostics (returns dict with figure)
             tau_results = tau_grid_result["tau_grid_results"]
@@ -226,7 +233,7 @@ def run_hierarchical_pipeline(
             diag_tau = diagnostics_tau_grid(diag_input, bait_unit, best_tau)
             fig_tau = diag_tau["figure"]
 
-            # Show/save hierarchical diagnostics
+            # Show/save IRIS diagnostics
             for name, fig in figs_hier.items():
                 if show_plots:
                     fig.show()
@@ -254,6 +261,8 @@ def run_hierarchical_pipeline(
                 {
                     "Protein": protein,
                     "BaitUnit": bait_unit,
+                    # Raw replicate counts are included in results_df for transparency only.
+                    # IRIS does NOT model replicate-specific rates; replicates are collapsed internally.
                     **{f"rep{j+1}": float(X[i, j]) for j in range(X.shape[1])},
                     "lambda1": best_em["lambda1"][i],
                     "lambda2": best_em["lambda2"][i],

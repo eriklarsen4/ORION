@@ -5,11 +5,6 @@ Created on Mon Feb  9 12:47:28 2026
 @author: Erik
 """
 
-# %% Imports
-
-# import numpy as np
-
-
 # %% Tau update for hierarchical SAINT
 
 def update_tau(
@@ -20,16 +15,22 @@ def update_tau(
     lambda3
 ):
     """
-    Update tau for hierarchical SAINT.
-
+    Update tau for IRIS.
+    
+    
+    PARAMETERS
+    
     tau is the shared rate parameter of the Gamma prior on each lambda (Poisson rate parameter for background, noise, and signal).
     Larger tau increases shrinkage of all lambda values toward zero.
 
-    X has shape n_preys by n_conditions.
-    gamma has shape n_preys by three (three latent variables).
-    lambda1, lambda2, lambda3, are prey-specific Poisson rate vectors (again, 1, 2, and 3 represent latent "background", "noise", and "signal" components of the mixture).
+    X: count/data matrix that has shape n_preys by n_conditions.
+    gamma: prey-specific posterior probabilities; has shape n_preys by three (three latent variables).
+    lambda1, lambda2, lambda3: prey-specific Poisson rate vectors (again, 1, 2, and 3 represent latent "background", "noise", and "signal" components of the mixture).
 
-    Returns a prey-specific tau vector.
+
+    RETURNS 
+    
+    a prey-specific tau vector.
     """
 
     n_preys, n_conditions = X.shape

@@ -7,12 +7,12 @@ Created on Mon Feb 23 09:14:57 2026
 
 # %% Imports
 import numpy as np
-from saint.model.hierarchical_likelihood import compute_loglik
+from orion.methods.iris.likelihood import compute_loglik
 
 
 # %% Tests
 
-def test_compute_hierarchical_loglik_runs_and_returns_scalar():
+def test_compute_iris_loglik_runs_and_returns_scalar():
     X = np.array([
         [1, 2],
         [0, 1],

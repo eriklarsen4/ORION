@@ -5,11 +5,6 @@ Created on Sun Feb  8 08:24:09 2026
 @author: Erik
 """
 
-# %% Import
-
-import numpy as np
-
-
 # %% Pi updates
 
 def update_pi(gamma):
@@ -20,11 +15,15 @@ def update_pi(gamma):
     Each pi value is the average posterior probability of its component
     across all preys.
 
-    Parameters
+
+    PARAMETERS
+    
     gamma : array with shape (n_preys, 3)
         Responsibilities for each component.
 
-    Returns
+
+    RETURNS
+    
     pi : array with shape (3,)
         Updated mixture weights.
     """

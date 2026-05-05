@@ -16,7 +16,8 @@ def validate_hyperparams(max_iter, tol, lambda_vecs, pi):
     """
     Validate all numeric hyperparameters and parameter shapes.
 
-    Parameters
+    PARAMETERS
+    
     max_iter : integer
         Maximum number of EM iterations.
 
@@ -29,7 +30,8 @@ def validate_hyperparams(max_iter, tol, lambda_vecs, pi):
     pi : array with shape three
         Mixture weights.
 
-    Raises
+    RAISES
+    
     ValueError if any validation check fails.
     """
 

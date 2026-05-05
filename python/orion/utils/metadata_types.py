@@ -8,11 +8,10 @@ Created on Mon Mar  2 10:59:07 2026
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
 
-# %% Dataclasses
 @dataclass
 class UserProvidedFields:
     biological_bait_names: Dict[str, str] = field(default_factory=dict)
-    AN: Dict[str, str] = field(default_factory=dict)   # Accession Number
+    AN: Dict[str, str] = field(default_factory=dict)
     MW: Dict[str, float] = field(default_factory=dict)
     extra_fields: Dict[str, Any] = field(default_factory=dict)
 
@@ -40,7 +39,7 @@ class PipelineDerivedFields:
 
 
 @dataclass
-class HierarchicalMetadata:
+class IRISMetadata:
     user_provided_fields: UserProvidedFields
     inferred_fields: InferredFields
     pipeline_derived_fields: PipelineDerivedFields

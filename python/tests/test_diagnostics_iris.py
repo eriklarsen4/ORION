@@ -10,10 +10,10 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 
-from saint.diagnostics.diagnostics_hierarchical import make_hierarchical_plots
+from orion.methods.iris.diagnostics import make_iris_plots
 
 # %% tests
-def test_make_hierarchical_plots_returns_figures():
+def test_make_iris_plots_returns_figures():
     # Minimal synthetic hierarchical EM results matching the new architecture
     results_em = {
         "loglik_history": [0.0, 1.0, 2.0],
@@ -63,7 +63,7 @@ def test_make_hierarchical_plots_returns_figures():
         ]),
     }
 
-    figs = make_hierarchical_plots(results_em, bait_name="B1")
+    figs = make_iris_plots(results_em, bait_name="B1")
 
     # New architecture: only trajectories + gamma
     assert set(figs.keys()) == {"trajectories", "gamma"}

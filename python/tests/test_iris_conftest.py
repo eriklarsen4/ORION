@@ -8,7 +8,7 @@ Created on Wed Mar  4 08:34:21 2026
 import pytest
 import pandas as pd
 
-from saint.pipeline.hierarchical_saint import run_hierarchical_pipeline
+from orion.methods.iris.pipeline import run_iris_pipeline
 
 # %% fixtures
 @pytest.fixture
@@ -25,8 +25,8 @@ def minimal_input_data():
 
 
 @pytest.fixture
-def hierarchical_results(minimal_input_data):
-    return run_hierarchical_pipeline(
+def iris_results(minimal_input_data):
+    return run_iris_pipeline(
         input_data=minimal_input_data,
         max_iter=5,
         seed=1,
@@ -35,15 +35,15 @@ def hierarchical_results(minimal_input_data):
 
 
 @pytest.fixture
-def hierarchical_metadata(hierarchical_results):
-    return hierarchical_results["metadata"]
+def iris_metadata(iris_results):
+    return iris_results["metadata"]
 
 
 @pytest.fixture
-def hierarchical_raw(hierarchical_results):
-    return hierarchical_results["raw_outputs"]
+def iris_raw(iris_results):
+    return iris_results["raw_outputs"]
 
 
 @pytest.fixture
-def hierarchical_df(hierarchical_results):
-    return hierarchical_results["results_df"]
+def iris_df(iris_results):
+    return iris_results["results_df"]

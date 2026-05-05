@@ -7,12 +7,12 @@ Created on Sat Feb 21 09:34:40 2026
 
 # %% Imports
 import numpy as np
-from saint.model.hierarchical_em_wrapper import run_em_hierarchical
+from orion.methods.iris.em_wrapper import run_em
 
 
 # %% Tests
 
-def test_em_hierarchical_runs_and_returns_expected_keys():
+def test_iris_runs_and_returns_expected_keys():
     X = np.array([[5, 3], [1, 0]])
 
     hyperparams = {
@@ -22,12 +22,15 @@ def test_em_hierarchical_runs_and_returns_expected_keys():
         "pi_init": np.array([0.5, 0.3, 0.2]),
     }
 
-    results = run_em_hierarchical(
+    results = run_em(
         X=X,
         hyperparams=hyperparams,
-        biological_bait="BAIT",
+        bait_unit='BAIT',
         max_iter=5,
+        tol_loglik=1e-6,
+        tol_params=1e-6,
         seed=1,
+        verbose=False,
     )
 
     expected_keys = {

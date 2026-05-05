@@ -7,12 +7,12 @@ Created on Sat Feb 21 09:29:14 2026
 
 # %% Imports
 import numpy as np
-from saint.model.hierarchical_responsibilities import compute_responsibilities
+from orion.methods.iris.responsibilities import compute_responsibilities
 
 
 # %% Tests
 
-def test_hierarchical_responsibilities_shape_and_normalization():
+def test_iris_responsibilities_shape_and_normalization():
     # X: 3 preys × 2 replicates
     X = np.array([
         [5, 3],
@@ -35,7 +35,7 @@ def test_hierarchical_responsibilities_shape_and_normalization():
     assert np.allclose(row_sums, 1.0)
 
 
-def test_hierarchical_responsibilities_extreme_cases():
+def test_iris_responsibilities_extreme_cases():
     # X: 2 preys × 2 replicates
     X = np.array([
         [10, 10],   # strong signal

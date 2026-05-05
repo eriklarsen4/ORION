@@ -13,14 +13,14 @@ import numpy as np
 from matplotlib.ticker import ScalarFormatter
 
 
-# %% Hierarchical Plots
-def make_hierarchical_plots(results_em, bait_name):
+# %% IRIS Plots
+def make_iris_plots(results_em, bait_name):
     """
-    Faceted hierarchical diagnostics: trajectories in a 2×2 grid.
+    Faceted IRIS diagnostics: trajectories in a 2×2 grid.
     Returns a dict of figures.
 
     This function expects the EM result dictionary produced by
-    run_em_hierarchical (or extracted from the tau-grid / pipeline),
+    run_em (or extracted from the tau-grid / IRIS pipeline),
     with the following keys:
 
         loglik_history : list of float
@@ -124,10 +124,10 @@ def plot_gamma3_density(
     with an optional vertical marker for a protein of interest.
 
 
-    Parameters
+    PARAMETERS
 
     results_df : DataFrame
-        Output results_df from the hierarchical pipeline, with columns:
+        Output results_df from the IRIS pipeline, with columns:
         Protein, BaitUnit, gamma3, ...
 
     bait_units : list of str
@@ -141,7 +141,7 @@ def plot_gamma3_density(
         Existing axis to draw on. If None, a new figure and axis are created.
 
 
-    Returns
+    RETURNS
     
     ax : matplotlib.axes.Axes
         Axis containing the KDE plot.
@@ -210,10 +210,11 @@ def plot_multi_bait_summary(results_df, bait_units):
     """
     Plot mean gamma3 per bait_unit as a simple multi-bait summary.
 
-    Parameters
+
+    PARAMETERS
     
     results_df : DataFrame
-        Output results_df from the hierarchical pipeline.
+        Output results_df from the IRIS pipeline.
 
     bait_units : list of str
         Ordered list of bait names to include and display on the x-axis.
