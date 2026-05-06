@@ -51,10 +51,14 @@ Then in Python:
 SAINT models observed spectral counts for a given bait‑specific experiment as arising from a two‑component Poisson mixture:
 
 
+SAINT models observed spectral counts for a given bait‑specific experiment as arising from a two‑component Poisson mixture:
+
 $$
-p(x_i \mid \Theta) = \pi_1 \, \text{Pois}(x_i \mid \lambda_1)
-+ \pi_2 \, \text{Pois}(x_i \mid \lambda_2)
+p(x_i \mid \Theta) = \pi_1 \,\text{Pois}(x_i \mid \lambda_1)
+                   + \pi_2 \,\text{Pois}(x_i \mid \lambda_2)
 $$
+
+
 
 
 where:
