@@ -52,10 +52,8 @@ SAINT models observed spectral counts for a given bait‑specific experiment as 
 
 
 $$
-\[
 p(x_i \mid \Theta) = \pi_1 \, \text{Pois}(x_i \mid \lambda_1)
 + \pi_2 \, \text{Pois}(x_i \mid \lambda_2)
-\]
 $$
 
 
@@ -116,7 +114,9 @@ Concretely, a bait-unit corresponds to a particular antibody pulling down a
 particular tagged or endogenous protein under a specific construct/condition, 
 with all its technical replicates grouped together.
 
-e.g. TP53-myc + all replicates = a bait-unit;
+e.g. 
+
+     TP53-myc + all replicates = a bait-unit;
      
      TP53 (endogenous) + all replicates = another bait-unit;
      
@@ -133,9 +133,7 @@ For a given bait‑specific experiment, IRIS models each collapsed prey count $$
 
 
 $$
-\[
 p(x_i \mid \Theta) = \sum_{k=1}^{3} \pi_k \, \text{Pois}(x_i \mid \lambda_k)
-\]
 $$
 
 
@@ -149,11 +147,9 @@ where:
 
 
 $$
-\[
 \gamma_{ik} =
 \frac{\pi_k \, \text{Pois}(x_i \mid \lambda_k)}
 {\sum_{j=1}^{3} \pi_j \, \text{Pois}(x_i \mid \lambda_j)}
-\]
 $$
 
 
@@ -164,11 +160,9 @@ IRIS applies a $$Gamma(\(\alpha, \tau\))$$ prior shared across experiments
 
 
 $$
-\[
 \lambda_k^{\text{new}} =
 \frac{\alpha + \sum_i \gamma_{ik} x_i}
 {\tau + \sum_i \gamma_{ik}}
-\]
 $$
 
 
@@ -182,11 +176,9 @@ IRIS updates them using a $$Dirichlet(\(\beta_1, \beta_2, \beta_3\))$$ prior:
 
 
 $$
-\[
 \pi_k^{\text{new}} =
 \frac{\beta_k + \sum_i \gamma_{ik}}
 {\sum_j \left(\beta_j + \sum_i \gamma_{ij}\right)}
-\]
 $$
 
 
