@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 
-from saint.diagnostics.diagnostics_classical import make_classical_plots
+from orion.methods.saint.diagnostics_classical import make_classical_plots
 
 # %% Test
 def test_make_classical_plots_returns_figures():
