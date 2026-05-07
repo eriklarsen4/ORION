@@ -190,10 +190,10 @@ Stabilization prevents any component from collapsing to zero prevalence, ensurin
 
 ### Per‑bait-unit independence
 
-IRIS fits this model independently for each bait‑unit, allowing:
+**IRIS fits this model independently for each bait‑unit**, allowing:
 
-- experiment‑specific signal distributions  
-- experiment‑specific mixture weights  
+- bait-unit‑specific signal distributions  
+- bait-unit‑specific mixture weights  
 - shared global hyperparameters $\alpha, \tau, \beta$ across experiments
 
 ---
@@ -203,14 +203,15 @@ IRIS fits this model independently for each bait‑unit, allowing:
 IRIS introduces several structural enhancements that directly address SAINT’s limitations:
 
 - **Stabilized, biologically meaningful per‑prey posterior probabilities**  
-  By generateing per-prey estimates, IRIS prevents ambiguous or noisy proteins that, in a non-per-prey paradigm, would disproportionately influence the component parameters used to evaluate all other preys.
-  Per-prey independence also yields clearer separation between components and more reliable signal probabilities.
+  By generating per-prey estimates, IRIS prevents ambiguous or noisy proteins that, in a non- per-prey paradigm, would disproportionately influence the component parameters used to evaluate all other preys.
+  A disproprtionate regression across preys also shifts component mixtures together. Thus, per-prey independence yields clearer separation between components and more reliable signal probabilities.
 
 - **Intermediate component for ambiguous signal**  
-  Absorbs borderline counts so they do not distort background or signal.
+  The intermediate component absorbs borderline counts so that they do not distort background or signal counts.
 
 - **Global hierarchical shrinkage**  
-  Encodes the biological assumption that background, ambiguous, and enriched signal levels should fall within broadly similar ranges across experiments (sampling variability should stabilize as replication number increases).
+  Regressing all prey estimates toward a global mean stabilizes extreme estimates.
+  This also implies the biological assumption that background, ambiguous, and enriched signal levels should fall within broadly similar ranges across experiments (sampling variability should stabilize as replication number increases).
 
 - **Dirichlet‑stabilized mixture weights**  
   Ensures that all components remain viable and prevents collapse in low‑information settings.
@@ -219,18 +220,24 @@ IRIS introduces several structural enhancements that directly address SAINT’s 
 
 ## Per‑prey independence and why it matters
 
-To reiterate: the most important improvement of IRIS over SAINT is that IRIS provides **per‑prey, per‑bait-unit posterior probabilities** that are more stable and interpretable because they are less distorted by the behavior of other preys.
+To reiterate: *the most important improvement of IRIS over SAINT is*: **IRIS provides per‑prey, per‑bait-unit posterior probabilities** that are more stable and interpretable because they are less distorted by the behavior of other preys.
 
 In SAINT, all preys jointly determine only two global components (background and signal).  
 This means that background, noisy, and signal proteins all influence the same two component means and mixture weights.  
+
 As a result, ambiguous or inconsistent proteins can distort the estimates used for every other prey.
 In other words, in a non-per-prey paradigm, prey proteins (potentially) completely unrelated to another prey directly effect that prey protein's estimates, masking its empirical evidence and fundamentally mis-representing the underlying biology.
 
 IRIS' independent, per-prey estimates **prevent this undue influence by noisy, ambiguous, and/or unrelated proteins on component parameters** that determine the posterior probabilities.
-However, IRIS' prey proteins are intentionally linked by bait-unit-wide hierarchical shrinkage (regressing per-prey estimates toward bait-unit global mean) and mixture-weight stabilization to enforce consistency and acknowledge the underlying biological context of a given sample/replicate.
+However, IRIS' prey proteins are intentionally linked by:
+
+- bait-unit-wide hierarchical shrinkage-- regressing per-prey estimates toward bait-unit global mean
+- mixture-weight stabilization
+
+These enforce consistency and acknowledge the underlying biological context of a given sample/replicate.
 This shrinkage intentionally has more influence on ambiguous or high-variability prey, allowing more consistent or high-confidence prey estimates to retain empirical signal.
 
-This yields a clearer separation between components, while also providing more stable signal probabilities due to shrinkage, and therefore, results in more biologically meaningful per‑prey estimates.
+The drives a clearer separation between components with more stable signal probabilities due to the shrinkage, and therefore, results in more biologically meaningful per‑prey estimates.
 
 ---
 
@@ -266,10 +273,13 @@ $$
 - an optional classification by taking the most probable component  
 - a stabilized, biologically interpretable view of its interaction behavior that accounts for bait-unit-wide structure
 
-Downstream analyses typically focus on the posterior probability of belonging to the **signal** component, using the background and ambiguous components as context for uncertainty and noise.
-Explicitly, the posterior probability belonging to the signal component for all target bait-units (i.e. not negative control) are averaged to provide the first, primary metric for candidate scoring.
+Downstream analyses focus on the posterior probability of belonging to the **signal** component, using the background and ambiguous components as context for uncertainty and noise:
 
-In other words, for target protein X, $\gamma_3$ values are averaged together (e.g., for the TP53 example above, all non‑negative‑control TP53 condition $\gamma_{3,\text{signal}}$ values are averaged together).
+- posterior probability belonging to the signal component for all target bait-units (i.e. not negative control) are averaged to provide the first, primary metric for candidate scoring.
+
+- in other words, **for target protein X, all $\gamma_3$ values are averaged together** 
+
+- (e.g., for the TP53 example above, all non‑negative‑control TP53 condition $\gamma_{3,\text{signal}}$ values are averaged together).
 
 ---
 
