@@ -226,7 +226,7 @@ In SAINT, all preys jointly determine only two global components (background and
 This means that background, noisy, and signal proteins all influence the same two component means and mixture weights.  
 
 As a result, ambiguous or inconsistent proteins can distort the estimates used for every other prey.
-In other words, in a non-per-prey paradigm, prey proteins (potentially) completely unrelated to another prey directly effect that prey protein's estimates, masking its empirical evidence and fundamentally mis-representing the underlying biology.
+In other words, in a non- per-prey paradigm, prey proteins (potentially) completely unrelated to another prey directly effect that prey protein's estimates, masking its empirical evidence and fundamentally mis-representing the underlying biology.
 
 IRIS' independent, per-prey estimates **prevent this undue influence by noisy, ambiguous, and/or unrelated proteins on component parameters** that determine the posterior probabilities.
 However, IRIS' prey proteins are intentionally linked by:

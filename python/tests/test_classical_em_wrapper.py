@@ -7,7 +7,7 @@ Created on Wed Mar  4 08:59:20 2026
 
 # %%Import
 import numpy as np
-from saint.model.classical_em_wrapper import run_em_classical
+from orion.methods.saint.classical_em_wrapper import run_em_classical
 
 # %% Test
 def test_run_em_classical_basic():

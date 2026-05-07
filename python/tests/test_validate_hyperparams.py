@@ -9,7 +9,7 @@ Created on Thu Feb 19 15:20:41 2026
 import numpy as np
 import pytest
 
-from saint.validation.validate_hyperparams import validate_hyperparams
+from orion.utils.validation.validate_hyperparams import validate_hyperparams
 
 
 # %% Tests

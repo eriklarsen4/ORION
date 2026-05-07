@@ -8,7 +8,7 @@ Created on Wed Mar  4 09:03:53 2026
 import numpy as np
 import pandas as pd
 
-from saint.pipeline.classical_saint import run_classical_pipeline
+from orion.methods.saint.classical_saint import run_classical_pipeline
 
 # %% Test
 def test_classical_pipeline_integration():

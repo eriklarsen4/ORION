@@ -7,7 +7,7 @@ Created on Sat Feb 21 09:28:38 2026
 
 # %% Imports
 import numpy as np
-from saint.model.classical_responsibilities import compute_responsibilities
+from orion.methods.saint.classical_responsibilities import compute_responsibilities
 
 
 # %% Tests

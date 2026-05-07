@@ -7,7 +7,7 @@ Created on Sat Feb  7 13:55:20 2026
 
 # %% Imports
 import numpy as np
-from saint.model.classical_likelihood import compute_loglik
+from orion.methods.saint.classical_likelihood import compute_loglik
 
 
 # %% Tests
