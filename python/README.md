@@ -1,6 +1,6 @@
-# ORION Python package
+# ORION (Observed Relationship Inference of Organized Networks) Python package
 
-The ORION Python package implements two related probabilistic models for analyzing interaction signal in bait‑specific experiments:
+The ORION Python package implements two related probabilistic models for analyzing protein-protein interaction signal in bait‑specific experiments:
 
 - SAINT — Significance Analysis of INTeractome  
 - IRIS — Inference of Regularized Interaction Signals  
@@ -71,13 +71,13 @@ SAINT produces continuous posterior probabilities for each prey belonging to bac
 However, the **two‑component structure, itself,** introduces several limitations that affect interpretability and stability:
 
 - **Ambiguous signal distorts both components**  
-  Even though SAINT outputs continuous probabilities, it must explain all observations using only two latent states.  
+  Even though SAINT outputs continuous probabilities, it must explain all observations using only two latent ("background"/non-interaction & "enriched"/signal/true-interaction) states.  
   Borderline or inconsistent counts therefore pull the background mean upward and the enriched mean downward, reducing the separation between them.  
   This makes the posterior probability of belonging to the signal component less stable and less interpretable.
 
 - **No hierarchical shrinkage**  
   SAINT estimates $$\(\lambda_1\)$$ and $$\(\lambda_2\)$$ independently for each experiment.  
-  Experiments with sparse counts, replicate imbalance, or outliers can produce extreme or biologically implausible component means because there is no global expectation to stabilize them.
+  Experiments with sparse counts, replicate imbalance, or outliers can produce extreme or biologically implausible component means.
 
 - **Unregularized mixture weights**  
   The mixture weights $$\(\pi_1, \pi_2\)$$ are updated purely from the data.  
@@ -94,7 +94,7 @@ IRIS is designed specifically to address these structural limitations.
 ## IRIS: Inference of Regularized Interaction Signals
 
 IRIS is a three‑component hierarchical Poisson mixture model fit independently to each bait‑unit*.
-Its primary purpose is to produce **stabilized, biologically meaningful per‑prey posterior probabilities** that are less distorted by the behavior of other preys.  
+Its primary purpose is to produce **stabilized, biologically meaningful per‑prey posterior probabilities** that are less distorted by the behavior of other preys, serving to more clearly prioritize follow-up candidate interactors.  
 To achieve this, IRIS uses hierarchical priors (Gamma and Dirichlet) as regularizers within a maximum-likelihood EM-style alternating procedure to produce point estimates for parameters rather than full Bayesian posterior distributions.
 IRIS achieves this with:
 
@@ -114,7 +114,7 @@ IRIS generalizes SAINT by:
 *NOTE: A *bait‑unit* is the specific antibody-protein immunoprecipitation setup
 whose replicates share the same underlying interaction distribution.
 
-Concretely, a bait-unit corresponds to a particular antibody pulling down a 
+In other words, a bait-unit corresponds to a particular antibody pulling down a 
 particular tagged or endogenous protein under a specific construct/condition, 
 with all its technical replicates grouped together.
 
@@ -170,7 +170,7 @@ $$
 $$
 
 
-Biologically, this reflects the expectation that background, ambiguous, and enriched signal levels should fall within broadly similar ranges across experiments.  
+Biologically, this reflects the assumption that background, ambiguous, and enriched signal levels should fall within broadly similar ranges across experiments-- or at least that, with more replicates, the estimates approach true mean signal levels.  
 Shrinkage prevents sparse or noisy experiments from producing extreme or biologically implausible component means.
 
 ### M‑step: mixture weights with Dirichlet stabilization
@@ -194,7 +194,7 @@ IRIS fits this model independently for each bait‑unit, allowing:
 
 - experiment‑specific signal distributions  
 - experiment‑specific mixture weights  
-- shared global hyperparameters $$\(\alpha, \tau, \beta\)$$ across experiments  
+- shared global hyperparameters $\alpha, \tau, \beta$ across experiments
 
 ---
 
@@ -203,14 +203,14 @@ IRIS fits this model independently for each bait‑unit, allowing:
 IRIS introduces several structural enhancements that directly address SAINT’s limitations:
 
 - **Stabilized, biologically meaningful per‑prey posterior probabilities**  
-  IRIS prevents ambiguous or noisy proteins from disproportionately influencing the component parameters used to evaluate all other preys.  
-  This yields clearer separation between components and more reliable signal probabilities.
+  By generateing per-prey estimates, IRIS prevents ambiguous or noisy proteins that, in a non-per-prey paradigm, would disproportionately influence the component parameters used to evaluate all other preys.
+  Per-prey independence also yields clearer separation between components and more reliable signal probabilities.
 
 - **Intermediate component for ambiguous signal**  
   Absorbs borderline counts so they do not distort background or signal.
 
 - **Global hierarchical shrinkage**  
-  Encodes the biological expectation that background, ambiguous, and enriched signal levels should fall within broadly similar ranges across experiments.
+  Encodes the biological assumption that background, ambiguous, and enriched signal levels should fall within broadly similar ranges across experiments (sampling variability should stabilize as replication number increases).
 
 - **Dirichlet‑stabilized mixture weights**  
   Ensures that all components remain viable and prevents collapse in low‑information settings.
@@ -219,16 +219,18 @@ IRIS introduces several structural enhancements that directly address SAINT’s 
 
 ## Per‑prey independence and why it matters
 
-The most important improvement of IRIS over SAINT is that IRIS provides **per‑prey, per‑bait-unit posterior probabilities** that are more stable and interpretable because they are less distorted by the behavior of other preys.
+To reiterate: the most important improvement of IRIS over SAINT is that IRIS provides **per‑prey, per‑bait-unit posterior probabilities** that are more stable and interpretable because they are less distorted by the behavior of other preys.
 
 In SAINT, all preys jointly determine only two global components (background and signal).  
 This means that background, noisy, and signal proteins all influence the same two component means and mixture weights.  
 As a result, ambiguous or inconsistent proteins can distort the estimates used for every other prey.
+In other words, in a non-per-prey paradigm, prey proteins (potentially) completely unrelated to another prey directly effect that prey protein's estimates, masking its empirical evidence and fundamentally mis-representing the underlying biology.
 
-IRIS does not mathematically isolate preys from each other — in fact, hierarchical shrinkage and mixture‑weight stabilization intentionally link preys by enforcing bait-unit-wide consistency.  
-However, IRIS **prevents any single prey (especially ambiguous or noisy ones) from disproportionately influencing the component parameters** that determine the posterior probabilities for all other preys.
+IRIS' independent, per-prey estimates **prevent this undue influence by noisy, ambiguous, and/or unrelated proteins on component parameters** that determine the posterior probabilities.
+However, IRIS' prey proteins are intentionally linked by bait-unit-wide hierarchical shrinkage (regressing per-prey estimates toward bait-unit global mean) and mixture-weight stabilization to enforce consistency and acknowledge the underlying biological context of a given sample/replicate.
+This shrinkage intentionally has more influence on ambiguous or high-variability prey, allowing more consistent or high-confidence prey estimates to retain empirical signal.
 
-This yields clearer separation between components, more stable signal probabilities, and more biologically meaningful per‑prey estimates.
+This yields a clearer separation between components, while also providing more stable signal probabilities due to shrinkage, and therefore, results in more biologically meaningful per‑prey estimates.
 
 ---
 
@@ -244,28 +246,30 @@ The algorithm iteratively:
 
 1. Estimates how likely each prey belongs to each signal category  
 2. Updates the definitions of those categories based on the data  
-3. Repeats until the assignments and parameters stabilize  
+3. Repeats until prey assignments to each component and with their given parameters stabilize  
 
 ### Per‑prey (per‑protein) estimates
 
-For each prey $$\(i\)$$, IRIS provides:
+For each prey $i$, IRIS provides:
 
 - a posterior probability vector  
-  
+
 $$
-\[
-  \gamma_i = \left(
-    \gamma_{i,\text{background}},
-    \gamma_{i,\text{ambiguous}},
-    \gamma_{i,\text{signal}}
-  \right)
-  \]
+\gamma_i = \left(
+  \gamma_{i,\text{background}},
+  \gamma_{i,\text{ambiguous}},
+  \gamma_{i,\text{signal}}
+\right)
 $$
+
 
 - an optional classification by taking the most probable component  
 - a stabilized, biologically interpretable view of its interaction behavior that accounts for bait-unit-wide structure
 
 Downstream analyses typically focus on the posterior probability of belonging to the **signal** component, using the background and ambiguous components as context for uncertainty and noise.
+Explicitly, the posterior probability belonging to the signal component for all target bait-units (i.e. not negative control) are averaged to provide the first, primary metric for candidate scoring.
+
+In other words, for target protein X, $\gamma_3$ values are averaged together (e.g., for the TP53 example above, all non‑negative‑control TP53 condition $\gamma_{3,\text{signal}}$ values are averaged together).
 
 ---
 
