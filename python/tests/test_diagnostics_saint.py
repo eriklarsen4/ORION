@@ -9,10 +9,10 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 
-from orion.methods.saint.diagnostics_classical import make_classical_plots
+from orion.methods.saint.diagnostics import make_saint_plots
 
 # %% Test
-def test_make_classical_plots_returns_figures():
+def test_make_saint_plots_returns_figures():
     # Minimal synthetic classical EM results
     results_em = {
         "loglik_history": [0.0, 1.0, 2.0],
@@ -45,7 +45,7 @@ def test_make_classical_plots_returns_figures():
         ]),
     }
 
-    figs = make_classical_plots(results_em, bait_name="B1")
+    figs = make_saint_plots(results_em, bait_name="B1")
 
     assert set(figs.keys()) == {"loglik", "lambda", "pi", "gamma"}
 

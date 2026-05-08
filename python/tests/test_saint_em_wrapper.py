@@ -7,10 +7,10 @@ Created on Wed Mar  4 08:59:20 2026
 
 # %%Import
 import numpy as np
-from orion.methods.saint.classical_em_wrapper import run_em_classical
+from orion.methods.saint.em_wrapper import run_em
 
 # %% Test
-def test_run_em_classical_basic():
+def test_run_em_saint_basic():
     # Simple synthetic counts
     X = np.array([5, 0, 3, 1], dtype=float)
 
@@ -20,7 +20,7 @@ def test_run_em_classical_basic():
         "pi_init": np.array([0.6, 0.4]),
     }
 
-    results = run_em_classical(
+    results = run_em(
         X,
         hyper,
         max_iter=10,

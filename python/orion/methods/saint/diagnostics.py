@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-# %% Classical diagnostics
+# %% Classical SAINT diagnostics
 
-def make_classical_plots(results_em, bait_name):
+def make_saint_plots(results_em, bait_name):
     """
     Create diagnostic plots for the classical SAINT EM results.
     This function returns a dictionary of matplotlib Figure objects.

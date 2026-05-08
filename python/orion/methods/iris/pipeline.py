@@ -9,7 +9,7 @@ Created on Tue Mar  3 18:20:10 2026
 import os
 import pandas as pd
 
-from orion.utils.io.data_input import load_bait_data
+from orion.utils.io.iris_loader import load_bait_data_iris
 from orion.methods.iris.tau_grid import run_tau_grid
 from orion.methods.iris.em_wrapper import run_em
 
@@ -149,7 +149,7 @@ def run_iris_pipeline(
     """
     
     # %% Load data and metadata
-    bait_unit_list, X_by_bait_unit, metadata = load_bait_data(input_data)
+    bait_unit_list, X_by_bait_unit, metadata = load_bait_data_iris(input_data)
     
     # Fill missing hyperparameters with defaults
     if hyperparams is None:

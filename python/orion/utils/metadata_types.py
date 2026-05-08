@@ -8,6 +8,7 @@ Created on Mon Mar  2 10:59:07 2026
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
 
+# %% Define data classes
 @dataclass
 class UserProvidedFields:
     biological_bait_names: Dict[str, str] = field(default_factory=dict)
@@ -18,14 +19,15 @@ class UserProvidedFields:
 
 @dataclass
 class InferredFields:
-    bait_units: List[str]
-    proteins_by_bait_unit: Dict[str, List[str]]
-    replicate_map: Dict[str, Any] = field(default_factory=dict)
-    conditions: Dict[str, Any] = field(default_factory=dict)
-    negative_controls_inferred: List[str] = field(default_factory=list)
-    control_bait_units: List[str] = field(default_factory=list)
-    treatment_bait_units: List[str] = field(default_factory=list)
-    extra_fields: Dict[str, Any] = field(default_factory=dict)
+    bait_units: list[str]
+    proteins_by_bait_unit: dict[str, list[str]]
+    control_bait_units: list[str]
+    treatment_bait_units: list[str]
+    extra_fields: dict
+
+    @property
+    def baits(self):
+        return self.bait_units
 
 
 @dataclass
@@ -39,7 +41,12 @@ class PipelineDerivedFields:
 
 
 @dataclass
-class IRISMetadata:
+class PipelineMetadata:
     user_provided_fields: UserProvidedFields
     inferred_fields: InferredFields
     pipeline_derived_fields: PipelineDerivedFields
+    
+    @property
+    def baits(self) -> List[str]:
+        # Backwards-compatible alias for tests / older code
+        return self.inferred_fields.bait_units

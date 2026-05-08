@@ -10,13 +10,13 @@ Created on Wed Mar  4 08:51:47 2026
 import numpy as np
 import pandas as pd
 
-from orion.methods.saint.classical_em_wrapper import run_em_classical
-from orion.utils.io.data_input import load_bait_data
-from orion.methods.saint.diagnostics_classical import make_classical_plots
+from orion.methods.saint.em_wrapper import run_em
+from orion.utils.io.saint_loader import load_bait_data_saint
+from orion.methods.saint.diagnostics import make_saint_plots
 
 # %% Classical SAINT pipeline
 
-def run_classical_pipeline(
+def run_saint_pipeline(
     input_data,
     hyperparams=None,
     make_plots=False,
@@ -29,24 +29,25 @@ def run_classical_pipeline(
 ):
     """
     Run the classical SAINT pipeline. This function collapses replicate-level counts
-    to a single total count per prey, runs classical EM for each bait_unit, and returns
+    to a single total count per prey, runs classical SAINT EM for each bait_unit, and returns
     a unified results object containing raw EM outputs, typed metadata, and a
-    prey-level results dataframe aligned with the hierarchical pipeline.
+    prey-level results dataframe aligned with the IRIS pipeline.
 
-    Parameters
+
+    PARAMETERS
 
     input_data : dict or DataFrame
-        Raw APMS data in the format expected by the data loader. The loader
-        converts the wide-format APMS table into per-bait_unit replicate matrices
+        Raw IPMS data in the format expected by the data loader. The loader
+        converts the wide-format IPMS table into per-bait_unit replicate matrices
         and constructs metadata including the per-bait protein ordering.
 
-    hyperparams : dict, optional
+    hyperparameters : dict, optional
         Optional hyperparameters and initialization values for the classical EM
         model. The classical EM wrapper uses:
             "lambda1_init" : initial Poisson rates for the background component
             "lambda2_init" : initial Poisson rates for the signal component
             "pi_init"      : initial mixing proportions (length 2)
-        Any additional entries are ignored by the classical EM wrapper but are
+        Any additional entries are ignored by the classical SAINT EM wrapper but are
         preserved in the metadata for architectural symmetry.
 
     make_plots : bool
@@ -71,14 +72,15 @@ def run_classical_pipeline(
     verbose : bool
         If True, print iteration-level diagnostics.
 
-    Returns
+
+    RETURNS
 
     dict
         Unified results object containing:
             - raw_outputs:
-                em_results : dict mapping each bait to the classical EM result
+                em_results : dict mapping each bait to the classical SAINT EM result
                 tau_info   : dict mapping each bait to an empty tau info dict
-            - metadata : typed metadata object mirroring the hierarchical pipeline
+            - metadata : typed metadata object mirroring the IRIS pipeline
             - results_df : combined prey-level results table with one row per
               prey–bait_unit pair, containing:
                   Protein, bait,
@@ -89,7 +91,7 @@ def run_classical_pipeline(
     """
 
     # %% Load data via unified loader
-    bait_unit_list, X_by_bait_unit, loader_metadata = load_bait_data(input_data)
+    bait_unit_list, X_by_bait_unit, loader_metadata = load_bait_data_saint(input_data)
 
     # %% Storage
     all_results = {}
@@ -106,12 +108,14 @@ def run_classical_pipeline(
 
     # %% Per-bait classical EM
     rows = []
+    
+    treatment_bait_units = loader_metadata['treatment_bait_units']
 
     for bait_unit in bait_unit_list:
         X = X_by_bait_unit[bait_unit]
         X_sum = X.sum(axis=1).astype(float)
 
-        # Classical pipeline does not use biological_bait_names
+        # Classical SAINT pipeline does not use biological_bait_names
         bait_unit = bait_unit
 
         # Mean level for initialization
@@ -134,8 +138,8 @@ def run_classical_pipeline(
             np.array([0.7, 0.3], dtype=float),
         )
 
-        # Run classical EM
-        results_em = run_em_classical(
+        # Run classical SAINT EM
+        results_em = run_em(
             X=X_sum,
             hyperparams=hyperparams_bait_unit,
             max_iter=max_iter,
@@ -156,8 +160,11 @@ def run_classical_pipeline(
         
         # Optional plotting
         if make_plots:
-            figs = make_classical_plots(results_em, bait_unit, plot_dir=plot_dir)
+            figs = make_saint_plots(results_em, bait_unit, plot_dir=plot_dir)
             all_results[bait_unit]["figures"] = figs
+            
+        if bait_unit not in treatment_bait_units:
+            continue
         
         # Build prey-level rows for this bait
         proteins = loader_metadata["proteins_by_bait_unit"][bait_unit]
@@ -189,7 +196,7 @@ def run_classical_pipeline(
     # %% Build results_df
     results_df = pd.concat(rows, ignore_index=True)
     
-    # Sort by Protein then gamma2 descending (analogous to hierarchical convention)
+    # Sort by Protein then gamma2 descending (analogous to IRIS convention)
     results_df = results_df.sort_values(
         by=["Protein", "gamma2"],
         ascending=[True, False],
@@ -199,42 +206,33 @@ def run_classical_pipeline(
     # %% Build the typed metadata
     
     from orion.utils.metadata_types import (
-        HierarchicalMetadata,
+        PipelineMetadata,
         UserProvidedFields,
         InferredFields,
         PipelineDerivedFields,
     )
     
     # Construct typed metadata
-    metadata_obj = HierarchicalMetadata(
-        user_provided_fields=UserProvidedFields(
-            biological_bait_names={},
-            AN={},
-            MW={},
+    metadata_obj = PipelineMetadata(
+        user_provided_fields=UserProvidedFields(...),
+        inferred_fields=InferredFields(
+            bait_units=loader_metadata["bait_units"],
+            proteins_by_bait_unit=loader_metadata["proteins_by_bait_unit"],
+            control_bait_units=loader_metadata["control_bait_units"],
+            treatment_bait_units=loader_metadata["treatment_bait_units"],
             extra_fields={},
         ),
-        inferred_fields=InferredFields(
-            bait_units=loader_metadata.get("bait_units", []),
-            proteins_by_bait_unit=loader_metadata.get("proteins_by_bait_unit", {}),
-            control_bait_units=loader_metadata.get("control_bait_units", []),
-            extra_fields={
-                k: v
-                for k, v in loader_metadata.items()
-                if k not in {
-                    "bait_units",
-                    "proteins_by_bait_unit",
-                    "control_bait_units",
-                }
-            },
-        ),
         pipeline_derived_fields=PipelineDerivedFields(
-            bait_units=loader_metadata.get("bait_units", []),
+            bait_units=loader_metadata["bait_units"],
             hyperparameters=hyperparams,
-            tau_grid=tau_grid,
-            convergence=all_convergence_info,
-            iteration_counts=all_iteration_counts,
+            tau_grid=[],              # SAINT has no tau grid
+            convergence={},           # SAINT has no convergence diagnostics
+            iteration_counts={},      # SAINT has no EM iteration counts
+            extra_fields={},
         ),
     )
+
+
     
     # %% Final unified output
     return {

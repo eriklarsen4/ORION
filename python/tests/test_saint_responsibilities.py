@@ -7,12 +7,12 @@ Created on Sat Feb 21 09:28:38 2026
 
 # %% Imports
 import numpy as np
-from orion.methods.saint.classical_responsibilities import compute_responsibilities
+from orion.methods.saint.responsibilities import compute_responsibilities
 
 
 # %% Tests
 
-def test_classical_responsibilities_shape_and_normalization():
+def test_saint_responsibilities_shape_and_normalization():
     # X: 3 preys × 2 replicates
     X = np.array([
         [5, 3],
@@ -34,7 +34,7 @@ def test_classical_responsibilities_shape_and_normalization():
     assert np.allclose(row_sums, 1.0)
 
 
-def test_classical_responsibilities_extreme_cases():
+def test_saint_responsibilities_extreme_cases():
     # X: 2 preys × 2 replicates
     X = np.array([
         [10, 10],   # strong signal

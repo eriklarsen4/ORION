@@ -7,12 +7,12 @@ Created on Sat Feb  7 13:55:20 2026
 
 # %% Imports
 import numpy as np
-from orion.methods.saint.classical_likelihood import compute_loglik
+from orion.methods.saint.likelihood import compute_loglik
 
 
 # %% Tests
 
-def test_compute_classical_loglik_runs_and_returns_scalar():
+def test_compute_saint_loglik_runs_and_returns_scalar():
     # X: 2 preys × 2 replicates
     X = np.array([
         [1, 2],

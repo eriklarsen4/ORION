@@ -9,9 +9,9 @@ Created on Sat Feb 21 19:09:57 2026
 
 import numpy as np
 
-# %% Classical EM wrapper
+# %% Classical SAINT EM wrapper
 
-def run_em_classical(
+def run_em(
     X,
     hyperparams,
     *,
@@ -22,7 +22,7 @@ def run_em_classical(
     verbose=False
 ):
     """
-    Classical EM algorithm for a single bait under a two-component Poisson
+    Classical SAINT EM algorithm for a single bait under a two-component Poisson
     mixture model.
 
     Model structure
