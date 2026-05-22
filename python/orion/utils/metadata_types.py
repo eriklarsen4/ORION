@@ -23,7 +23,9 @@ class InferredFields:
     proteins_by_bait_unit: dict[str, list[str]]
     control_bait_units: list[str]
     treatment_bait_units: list[str]
-    extra_fields: dict
+
+    # IRIS‑specific metadata here; SAINT ignores it
+    extra_fields: dict = field(default_factory=dict)
 
     @property
     def baits(self):
@@ -48,5 +50,4 @@ class PipelineMetadata:
     
     @property
     def baits(self) -> List[str]:
-        # Backwards-compatible alias for tests / older code
         return self.inferred_fields.bait_units

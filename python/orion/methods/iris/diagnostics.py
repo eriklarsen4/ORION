@@ -195,7 +195,16 @@ def plot_gamma3_density(
 
     ax.set_xlabel("Average gamma3 value")
     ax.set_ylabel("Density")
-    ax.set_title("Combined gamma3 density for: " + ", ".join(bait_units))
+    if protein_of_interest is not None and marker_value is not None:
+        ax.set_title(
+            f"Average gamma3 density — {protein_of_interest} (red line)\n"
+            f"Baits: {', '.join(bait_units)}"
+        )
+    else:
+        ax.set_title(
+            "Average gamma3 density\n" +
+            f"Baits: {', '.join(bait_units)}"
+        )
 
     ax.ticklabel_format(style="plain", axis="both")
     ax.get_xaxis().get_offset_text().set_visible(False)

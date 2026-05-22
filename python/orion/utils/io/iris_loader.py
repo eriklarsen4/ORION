@@ -13,7 +13,8 @@ import numpy as np
 
 # %% IRIS function: load the data
 def load_bait_data_iris(
-    user_provided_df: Union[pd.DataFrame, str]
+    user_provided_df: Union[pd.DataFrame, str],
+    metadata: Dict
 ) -> Tuple[List[str], Dict[str, np.ndarray], Dict]:
     """
     Load IPMS data and construct per-bait_unit replicate matrices for the IRIS
@@ -28,20 +29,22 @@ def load_bait_data_iris(
 
     Replicates are preserved (no collapsing), and a deterministic protein
     ordering is enforced within each bait_unit. The resulting metadata includes
-    the bait_unit list and per-bait_unit protein lists, which define the
-    canonical row ordering for downstream IRIS outputs.
+    the bait_unit list, per-bait_unit protein lists, and now the expression
+    system associated with each bait_unit.
 
-    
     PARAMETERS
-    
+
     user_provided_df : DataFrame or str
         Raw IPMS data in wide format (Protein column plus replicate columns
         of the form <condition>_<bait>_<rep>), or a path to a .CSV file
         containing such a table.
 
+    metadata : dict
+        User-supplied metadata including:
+            - "expression_system": dict mapping bait_name → endogenous/non_endogenous
 
     RETURNS
-    
+
     bait_unit_list : list of str
         Sorted list of bait_units (condition × bait) present in the dataset.
 
@@ -49,12 +52,13 @@ def load_bait_data_iris(
         Dictionary mapping each bait_unit to its numeric replicate matrix
         (rows = proteins in deterministic order, columns = replicates).
 
-    metadata : dict
+    metadata_out : dict
         Dictionary containing:
             - "bait_units": sorted list of bait_units
             - "proteins_by_bait_unit": dict mapping bait_unit → ordered protein list
             - "control_bait_units": bait_units with Condition == 'Control'
             - "treatment_bait_units": bait_units with Condition != 'Control'
+            - "expression_system_by_bait_unit": dict mapping bait_unit → expression system
     """
 
     # Case 1: user passed a DataFrame
@@ -67,7 +71,10 @@ def load_bait_data_iris(
         user_provided_df = pd.read_csv(path)
 
     # Convert wide → long with bait_unit = condition_bait
-    long_df = _extract_bait_matrix_iris(user_provided_df)
+    long_df = _extract_bait_matrix_iris(
+        user_provided_df,
+        metadata["expression_system"]
+    )
 
     # Identify control vs treatment bait_units using Condition
     control_mask = long_df["Condition"] == "Control"
@@ -99,18 +106,46 @@ def load_bait_data_iris(
         )
         X_by_bait_unit[bait_unit] = df_b[numeric_cols].astype(float).to_numpy()
 
-    metadata = {
-        "bait_units": bait_unit_list,
-        "proteins_by_bait_unit": proteins_by_bait_unit,
-        "control_bait_units": control_bait_units,
-        "treatment_bait_units": treatment_bait_units,
+    # expression system per bait_unit
+    expression_system_by_bait_unit = {
+        bu: long_df.loc[long_df["BaitUnit"] == bu, "ExpressionSystem"].iloc[0]
+        for bu in bait_unit_list
     }
 
-    return bait_unit_list, X_by_bait_unit, metadata
+    metadata_out = {
+            "bait_units": bait_unit_list,
+            "proteins_by_bait_unit": proteins_by_bait_unit,
+            "control_bait_units": control_bait_units,
+            "treatment_bait_units": treatment_bait_units,
+            "expression_system_by_bait_unit": expression_system_by_bait_unit,
+        }
+    
+    # IRIS-specific metadata for PipelineMetadata.extra_fields
+    bait_name_by_bait_unit = {
+        bu: long_df.loc[long_df["BaitUnit"] == bu, "BaitName"].iloc[0]
+        for bu in bait_unit_list
+    }
+
+    condition_by_bait_unit = {
+        bu: long_df.loc[long_df["BaitUnit"] == bu, "Condition"].iloc[0]
+        for bu in bait_unit_list
+    }
+
+    metadata_out["extra_fields"] = {
+        "bait_name_by_bait_unit": bait_name_by_bait_unit,
+        "condition_by_bait_unit": condition_by_bait_unit,
+        "expression_system_by_bait_unit": expression_system_by_bait_unit,
+    }
+
+    return bait_unit_list, X_by_bait_unit, metadata_out
 
 
 # %% Extract the bait matrix, having parsed the conditions, samples, and replicates
-def _extract_bait_matrix_iris(user_provided_df: pd.DataFrame) -> pd.DataFrame:
+def _extract_bait_matrix_iris(
+    user_provided_df: pd.DataFrame,
+    expression_system: Dict[str, str]
+) -> pd.DataFrame:
+
     protein = user_provided_df["Protein"].tolist()
     value_cols = [c for c in user_provided_df.columns if c != "Protein"]
 
@@ -146,13 +181,16 @@ def _extract_bait_matrix_iris(user_provided_df: pd.DataFrame) -> pd.DataFrame:
             .to_numpy()
         )
 
-    # Build a separate DataFrame per bait_unit (CRITICAL: avoid global schema)
+    # Build a separate DataFrame per bait_unit
     dfs = []
 
     for bait_unit, info in parsed.items():
         condition = info["condition"]
         bait_name = info["bait_name"]
         rep_dict = info["reps"]
+
+        # lookup expression system
+        expr = expression_system.get(bait_name, None)
 
         rows = []
         for i, p in enumerate(protein):
@@ -161,6 +199,7 @@ def _extract_bait_matrix_iris(user_provided_df: pd.DataFrame) -> pd.DataFrame:
                 "BaitUnit": bait_unit,
                 "BaitName": bait_name,
                 "Condition": condition,
+                "ExpressionSystem": expr,
             }
             for r in sorted(rep_dict.keys()):
                 row[f"rep{r}"] = float(rep_dict[r][i])
@@ -168,9 +207,4 @@ def _extract_bait_matrix_iris(user_provided_df: pd.DataFrame) -> pd.DataFrame:
 
         dfs.append(pd.DataFrame(rows))
 
-    # CRITICAL: sort=False prevents pandas from unioning columns alphabetically
     return pd.concat(dfs, ignore_index=True, sort=False)
-
-
-
-

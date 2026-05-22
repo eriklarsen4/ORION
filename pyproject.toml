@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "saint"
+name = "orion"
 version = "0.1.0"
-description = "Modular, explicit, reproducible implementation of classical and hierarchical SAINT models."
+description = "Modular, explicit, reproducible implementation of classical SAINT and IRIS algorithms."
 authors = [
     { name = "Erik Larsen" }
 ]
@@ -16,8 +16,11 @@ dependencies = [
     "matplotlib",
 ]
 
-[tool.setuptools.packages.find]
-where = ["."]
+[tool.setuptools]
+packages = ["orion"]
+
+[tool.setuptools.package-dir]
+orion = "python/orion"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

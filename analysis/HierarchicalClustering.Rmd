@@ -100,7 +100,6 @@ knitr::opts_chunk$set(
 ```{r Attach Packages, message=F,warning=F}
 # data/wrangling
 library(tidyverse)
-library(Endo)
 library(DT)
 
 # clustering

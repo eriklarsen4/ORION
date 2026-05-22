@@ -106,7 +106,7 @@ def run_saint_pipeline(
     if hyperparams is None:
         hyperparams = {}
 
-    # %% Per-bait classical EM
+    # %% Per-bait classical SAINT EM
     rows = []
     
     treatment_bait_units = loader_metadata['treatment_bait_units']
@@ -125,18 +125,19 @@ def run_saint_pipeline(
         hyperparams_bait_unit = dict(hyperparams)
 
         # Initialization values (only set if not already provided)
-        hyperparams_bait_unit.setdefault(
-            "lambda1_init",
-            np.full(X_sum.shape[0], 0.5 * mean_level),
-        )
-        hyperparams_bait_unit.setdefault(
-            "lambda2_init",
-            np.full(X_sum.shape[0], 1.5 * mean_level),
-        )
-        hyperparams_bait_unit.setdefault(
-            "pi_init",
-            np.array([0.7, 0.3], dtype=float),
-        )
+        lambda1_init_scalar = float(max(1.0, 0.5 * mean_level))
+        lambda2_init_scalar = float(max(2.0, 1.5 * mean_level))
+        
+        hyperparams_bait_unit.setdefault("lambda1_init", lambda1_init_scalar)
+        hyperparams_bait_unit.setdefault("lambda2_init", lambda2_init_scalar)
+        
+        # force pi_init to be 2-vector
+        pi_init = hyperparams_bait_unit.get("pi_Init", None)
+        
+        if pi_init is None or np.shape(pi_init) != (2,):
+            hyperparams_bait_unit["pi_init"] = np.array([0.7, 0.3], dtype = float)
+        else: 
+            hyperparams_bait_unit["pi_init"] = np.array(pi_init, dtype = float)
 
         # Run classical SAINT EM
         results_em = run_em(
@@ -161,7 +162,6 @@ def run_saint_pipeline(
         # Optional plotting
         if make_plots:
             figs = make_saint_plots(results_em, bait_unit, plot_dir=plot_dir)
-            all_results[bait_unit]["figures"] = figs
             
         if bait_unit not in treatment_bait_units:
             continue
@@ -193,26 +193,36 @@ def run_saint_pipeline(
         
         rows.append(df_bait_unit)
     
-    # %% Build results_df
-    results_df = pd.concat(rows, ignore_index=True)
-    
-    # Sort by Protein then gamma2 descending (analogous to IRIS convention)
-    results_df = results_df.sort_values(
-        by=["Protein", "gamma2"],
-        ascending=[True, False],
-        ignore_index=True,
-    )
-    
-    # %% Build the typed metadata
-    
+    # %% Assemble results_df
+    if rows:
+        results_df = pd.concat(rows, ignore_index=True)
+        results_df = results_df.sort_values(
+            by=["gamma2", "Protein"],
+            ascending=[False, True],
+            ignore_index=True,
+        )
+    else:
+        results_df = pd.DataFrame(
+            columns=[
+                "Protein",
+                "BaitUnit",
+                "lambda1",
+                "lambda2",
+                "pi1",
+                "pi2",
+                "gamma1",
+                "gamma2",
+            ]
+        )
+
+    # %% Build typed metadata
     from orion.utils.metadata_types import (
         PipelineMetadata,
         UserProvidedFields,
         InferredFields,
         PipelineDerivedFields,
     )
-    
-    # Construct typed metadata
+
     metadata_obj = PipelineMetadata(
         user_provided_fields=UserProvidedFields(...),
         inferred_fields=InferredFields(
@@ -225,25 +235,36 @@ def run_saint_pipeline(
         pipeline_derived_fields=PipelineDerivedFields(
             bait_units=loader_metadata["bait_units"],
             hyperparameters=hyperparams,
-            tau_grid=[],              # SAINT has no tau grid
-            convergence={},           # SAINT has no convergence diagnostics
-            iteration_counts={},      # SAINT has no EM iteration counts
+            tau_grid=[],                    # SAINT has no tau grid
+            convergence=all_convergence_info,
+            iteration_counts=all_iteration_counts,
             extra_fields={},
         ),
     )
 
+    # %% Build Spyder‑friendly flat EM results
+    flat_em_results = {}
+    for bait_unit, em in all_results.items():
+        flat_em_results[bait_unit] = {
+            "lambda1": np.array(em["lambda1"], dtype=float),
+            "lambda2": np.array(em["lambda2"], dtype=float),
+            "pi": np.array(em["pi"], dtype=float),
+            "gamma": np.array(em["gamma"], dtype=float),
+            "loglik_history": np.array(em["loglik_history"], dtype=float),
+            "lambda1_history": np.array(em["lambda1_history"], dtype=float),
+            "lambda2_history": np.array(em["lambda2_history"], dtype=float),
+            "pi_history": np.array(em["pi_history"], dtype=float),
+            "iteration_count": int(em["iteration_count"]),
+            "converged": bool(em["convergence_info"]["converged"]),
+        }
 
-    
-    # %% Final unified output
+    # %% Final unified output — IRIS‑parallel structure  # CHANGED
     return {
         "raw_outputs": {
-            "em_results": all_results,
+            "em_results": flat_em_results,
             "tau_info": all_tau_info,
         },
-        "metadata": metadata_obj,
-        "results_df": results_df.sort_values(
-            by=["gamma2", "Protein"],
-            ascending=[False, True],
-            ignore_index=True,
-        ),
+        # REMOVE metadata_obj from the Spyder-visible dict
+        # "metadata": metadata_obj,
+        "results_df": results_df,
     }

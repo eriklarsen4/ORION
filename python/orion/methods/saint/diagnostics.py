@@ -13,7 +13,7 @@ import numpy as np
 
 # %% Classical SAINT diagnostics
 
-def make_saint_plots(results_em, bait_name):
+def make_saint_plots(results_em, bait_unit, plot_dir=None):
     """
     Create diagnostic plots for the classical SAINT EM results.
     This function returns a dictionary of matplotlib Figure objects.
@@ -38,7 +38,7 @@ def make_saint_plots(results_em, bait_name):
     plt.plot(loglik_history, marker="o")
     plt.xlabel("Iteration")
     plt.ylabel("Log likelihood")
-    plt.title(f"Classical SAINT log likelihood trajectory for {bait_name}")
+    plt.title(f"Classical SAINT log likelihood trajectory for {bait_unit}")
     figs["loglik"] = fig_loglik
 
     # %% Lambda trajectories
@@ -46,14 +46,14 @@ def make_saint_plots(results_em, bait_name):
     lambda1_history = np.array(results_em["lambda1_history"])
     lambda2_history = np.array(results_em["lambda2_history"])
 
-    mean_lambda1_per_iteration = lambda1_history.mean(axis=1)
-    mean_lambda2_per_iteration = lambda2_history.mean(axis=1)
+    mean_lambda1_per_iteration = lambda1_history
+    mean_lambda2_per_iteration = lambda2_history
 
     plt.plot(mean_lambda1_per_iteration, label="lambda1 mean")
     plt.plot(mean_lambda2_per_iteration, label="lambda2 mean")
     plt.xlabel("Iteration")
     plt.ylabel("Mean lambda value")
-    plt.title(f"Classical SAINT lambda trajectories for {bait_name}")
+    plt.title(f"Classical SAINT lambda trajectories for {bait_unit}")
     plt.legend()
     figs["lambda"] = fig_lambda
 
@@ -68,7 +68,7 @@ def make_saint_plots(results_em, bait_name):
     plt.plot(mixture_weight_signal, label="pi2 (signal)")
     plt.xlabel("Iteration")
     plt.ylabel("Mixture weight")
-    plt.title(f"Classical SAINT pi trajectories for {bait_name}")
+    plt.title(f"Classical SAINT pi trajectories for {bait_unit}")
     plt.legend()
     figs["pi"] = fig_pi
 
@@ -80,7 +80,7 @@ def make_saint_plots(results_em, bait_name):
     plt.hist(posterior_membership_final[:, 1], bins=30, alpha=0.5, label="gamma2 (signal)")
     plt.xlabel("Posterior membership probability")
     plt.ylabel("Count")
-    plt.title(f"Classical SAINT gamma distributions for {bait_name}")
+    plt.title(f"Classical SAINT gamma distributions for {bait_unit}")
     plt.legend()
     figs["gamma"] = fig_gamma
 

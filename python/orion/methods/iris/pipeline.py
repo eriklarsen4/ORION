@@ -36,6 +36,8 @@ def run_iris_pipeline(
     plot_dir=None,
     save_results=False,
     results_csv=None,
+    protein_of_interest=None,
+    metadata=None,
 ):
     """
     Run the IRIS pipeline for all bait_units using a per-bait_unit tau grid
@@ -96,7 +98,15 @@ def run_iris_pipeline(
     plot_dir : str or Path, optional
         Directory in which to save .png files when save_plots is True. If
         save_plots is True and plot_dir is None, a ValueError is raised.
-    
+        
+    protein_of_interest : str
+        If specified, includes an index of the target protein's average gamma3
+        posterior probability-- the average taken from samples across replicates
+        of its own IP
+        
+    metadata : dict
+        User-supplied metadata including:
+            - "expression_system": dict mapping bait_name → endogenous/non_endogenous
     
     RETURNS
     
@@ -149,7 +159,7 @@ def run_iris_pipeline(
     """
     
     # %% Load data and metadata
-    bait_unit_list, X_by_bait_unit, metadata = load_bait_data_iris(input_data)
+    bait_unit_list, X_by_bait_unit, metadata = load_bait_data_iris(input_data, metadata)
     
     # Fill missing hyperparameters with defaults
     if hyperparams is None:
@@ -290,18 +300,33 @@ def run_iris_pipeline(
                                     )
     
     # %% Global gamma3 density plot (only once, after results_df)
+    
     if make_plots:
-        ax_gamma3 = plot_gamma3_density(results_df)
+        bait_units = sorted(results_df['BaitUnit'].unique())
+    
+        ax_gamma3 = plot_gamma3_density(
+            results_df,
+            bait_units,
+            protein_of_interest=protein_of_interest,
+        )
     
         if show_plots:
             ax_gamma3.figure.show()
     
         if save_plots:
             os.makedirs(plot_dir, exist_ok=True)
+    
+            # Dynamic filename if protein is provided
+            if protein_of_interest is not None:
+                fname = f"global_gamma3_density_{protein_of_interest}.png"
+            else:
+                fname = "global_gamma3_density.png"
+    
             ax_gamma3.figure.savefig(
-                os.path.join(plot_dir, "global_gamma3_density.png"),
+                os.path.join(plot_dir, fname),
                 bbox_inches="tight",
             )
+
     
     # %% Unified return object
     output = {

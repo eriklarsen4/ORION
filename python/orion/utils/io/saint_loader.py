@@ -23,9 +23,17 @@ def load_bait_data_saint(
 
     This loader accepts either a wide-format DataFrame or a path to a CSV file,
     converts the data into a long format, and assembles per-bait numeric
-    matrices. Unlike the IRIS pipeline, the classical SAINT model treats the
-    bait name itself as the modeling unit; condition is not part of the
-    bait_unit identity.
+    matrices.
+    
+    For the classical SAINT pipeline (this one), the modeling unit is the bait 
+    name alone. SAINT does not distinguish condition × bait combinations as 
+    separate units. All replicates for a given bait name (regardless of 
+    condition prefix in the column header) are aggregated into a single 
+    bait_unit for EM fitting.
+
+    This differs intentionally from the IRIS pipeline, where bait_unit is defined
+    as <condition>_<bait>. Downstream diagnostics and comparison code must treat
+    SAINT bait_units as bait-level summaries, not condition-level units.
 
     Replicates are preserved (no collapsing), and a deterministic protein
     ordering is enforced within each bait. The resulting metadata includes the
@@ -122,7 +130,7 @@ def _extract_bait_matrix_classical(user_provided_df: pd.DataFrame) -> pd.DataFra
     index. Replicates are preserved exactly as provided; no collapsing or
     averaging is performed.
 
-    For the classical pipeline, the modeling unit is the bait name alone.
+    For the classical SAINT pipeline, the modeling unit is the bait name alone.
     Condition is tracked but is not part of the bait_unit identity.
 
 

@@ -161,8 +161,8 @@ def run_em(
     # Initialize Poisson rate parameters for the two mixture components
     # Component 1 (index 0): background / non-interactor
     # Component 2 (index 1): true signal / interactor
-    lambda1 = hyperparams["lambda1_init"].astype(float).copy()
-    lambda2 = hyperparams["lambda2_init"].astype(float).copy()
+    lambda1 = float(hyperparams["lambda1_init"])
+    lambda2 = float(hyperparams["lambda2_init"])
 
     # Initialize mixing proportions for the two components:
     # pi[0]: prior probability of background component (component1)
@@ -247,10 +247,10 @@ def run_em(
         # log-likelihood under the current responsibilities gamma.
 
         # Responsibility-weighted counts for each component
-        posterior_weighted_counts_component1 = (
+        posterior_weighted_counts_component1 = np.sum(
             posterior_membership_component1 * X
         )
-        posterior_weighted_counts_component2 = (
+        posterior_weighted_counts_component2 = np.sum(
             posterior_membership_component2 * X
         )
 
@@ -258,39 +258,41 @@ def run_em(
         effective_membership_component1 = posterior_membership_component1 + eps
         effective_membership_component2 = posterior_membership_component2 + eps
 
-        # Updated Poisson rates (element-wise for each prey)
-        lambda1_new = (
-            posterior_weighted_counts_component1 /
-            effective_membership_component1
+        # Updated Poisson rates; global; keep rates within reasonable range
+        lambda1_new = float(np.clip(
+            posterior_weighted_counts_component1.sum() /
+            (effective_membership_component1.sum() + eps),
+            1e-6,
+            1e6
+            )
         )
-        lambda2_new = (
-            posterior_weighted_counts_component2 /
-            effective_membership_component2
+        lambda2_new = float(np.clip(
+            posterior_weighted_counts_component2.sum() /
+            (effective_membership_component2.sum() + eps),
+            1e-6,
+            1e6
+            )
         )
-
-        # Numerical safety: keep rates within a reasonable range
-        lambda1_new = np.clip(lambda1_new, 1e-6, 1e6)
-        lambda2_new = np.clip(lambda2_new, 1e-6, 1e6)
 
         # Updated mixing proportions
         # pi_new[k] = average responsibility for component k
         pi_new = np.array([
-            posterior_membership_component1.sum() / n,
-            posterior_membership_component2.sum() / n
+            effective_membership_component1.mean(),
+            effective_membership_component2.mean()
         ], dtype=float)
 
         # Store histories for diagnostics and convergence assessment
-        lambda1_history.append(lambda1_new.copy())
-        lambda2_history.append(lambda2_new.copy())
+        lambda1_history.append(lambda1_new)
+        lambda2_history.append(lambda2_new)
         pi_history.append(pi_new.copy())
         gamma_history.append(posterior_membership_probabilities.copy())
 
         # Parameter changes for convergence checking
         delta_lambda = (
-            np.max(np.abs(lambda1_new - lambda1)) +
-            np.max(np.abs(lambda2_new - lambda2))
+            np.abs(lambda1_new - lambda1) +
+            np.abs(lambda2_new - lambda2)
         )
-        delta_pi = np.max(np.abs(pi_new - pi))
+        delta_pi = float(np.max(np.abs(pi_new - pi)))
 
         # Commit updates for next iteration
         lambda1 = lambda1_new
@@ -298,9 +300,12 @@ def run_em(
         pi = pi_new
         
         # Compute observed-data log-likelihood at updated parameters
-        pois1 = pi[0] * np.exp(X * np.log(lambda1 + eps) - lambda1)
-        pois2 = pi[1] * np.exp(X * np.log(lambda2 + eps) - lambda2)
-        loglik = float(np.sum(np.log(pois1 + pois2 + eps)))
+        loglik = float(
+            np.sum(
+                max_log_posterior_per_prey[:, 0] +
+                np.log(posterior_normalizing_constant_per_prey[:, 0] + eps)
+                )
+            )
         
         # Optional monotonicity enforcement
         if loglik_history and loglik < loglik_history[-1]:

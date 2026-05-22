@@ -20,12 +20,11 @@ os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 
-# CHANGE THIS to the folder that contains the "saint" directory
-#project_root = Path(r"C:\Users\Erik\Desktop\Programming\Python\Interactome Project")
-#sys.path.insert(0, str(project_root))
+# Add ORION/python to the import path
+sys.path.insert(0, r"C:/Users/Erik/Desktop/Programming/R/Bio/ORION/python")
 
 # get the proteomics data
-data = rdata.read_rda('C:/Users/Erik/Desktop/Programming/R/Bio/Endo/Rpkg/data/IPMS_counts.rda')
+data = rdata.read_rda('C:/Users/Erik/Desktop/Programming/R/Bio/ORION/Rpkg/data/IPMS_counts.rda')
 
 # %% 
 # Data cleaning
@@ -110,8 +109,8 @@ data = data.dropna(subset=['Protein'])
 #data.loc[data['Protein'].str.contains("TMEM184B", regex = True)]
 # %% pipeline imports and metadata construction
 
-from saint.pipeline.hierarchical_saint import run_hierarchical_pipeline
-from saint.pipeline.classical_saint import run_classical_pipeline
+from orion.methods.iris.pipeline import run_iris_pipeline
+from orion.methods.saint.pipeline import run_saint_pipeline
 
 metadata = {
     "biological_bait_names": {
@@ -120,6 +119,12 @@ metadata = {
         "BirAV5": "birA",
         "GFPmyc": "GFP"
     },
+    "expression_system": {
+        "TMEMV5": "non_endogenous",
+        "TMEMmyc": "non_endogenous",
+        "BirAV5": "non_endogenous",
+        "GFPmyc": "non_endogenous"
+        },
     "AN" : {
         "TMEM184B" : "Q9Y519"
         },
@@ -130,44 +135,50 @@ metadata = {
 
 # %% Run classical SAINT
 
-results_classical = run_classical_pipeline(
+results_saint = run_saint_pipeline(
     input_data=data,
     make_plots=True
     )
 
-# %% Run hierarchical SAINT
-results_hierarchical = run_hierarchical_pipeline(
+# %% Pull SAINT results
+
+df_saint = results_saint['results_df']   
+
+# %% Run IRIS
+results_iris = run_iris_pipeline(
     input_data=data,
     make_plots=True,
-    plot_dir='C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/python',
+    plot_dir='C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python',
     save_results=True,
-    results_csv='C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/python/hierarchical_results.csv'
+    results_csv='C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/iris_results.csv',
+    protein_of_interest='TMEM184B',
+    metadata=metadata
 )
 
 # %%
 
-from saint.pipeline.hierarchical_saint import run_hierarchical_pipeline
-from saint.diagnostics.diagnostics_tau_grid import diagnostics_tau_grid
-from saint.diagnostics.diagnostics_hierarchical import make_hierarchical_plots
-from saint.diagnostics.diagnostics_pipeline import plot_gamma3_density
+#from orion.methods.iris.pipeline import run_iris_pipeline
+#from orion.methods.iris.diagnostics_tau_grid import diagnostics_tau_grid
+#from orion.methods.iris.diagnostics import make_iris_plots
+#from orion.methods.iris.diagnostics import plot_gamma3_density
 
-em_results = results_hierarchical["raw_outputs"]["em_results"]
-tau_info   = results_hierarchical["raw_outputs"]["tau_info"]
+#em_results = results_iris["raw_outputs"]["em_results"]
+#tau_info   = results_iris["raw_outputs"]["tau_info"]
 
-# per-bait hierarchical diagnostics
-for bait, result in em_results.items():
-    figs_hier = make_hierarchical_plots(result, bait)
-    for f in figs_hier.values():
-        f.show()
+# per-bait iris diagnostics
+#for bait, result in em_results.items():
+#    figs_hier = make_iris_plots(result, bait)
+#    for f in figs_hier.values():
+#        f.show()
 
 # per-bait tau-grid diagnostics
-for bait, info in tau_info.items():
-    diag_tau = diagnostics_tau_grid(info, bait)
-    diag_tau["figure"].show()
+#for bait, info in tau_info.items():
+#    diag_tau = diagnostics_tau_grid(info, bait)
+#    diag_tau["figure"].show()
 
 # pipeline-level KDE
-fig_kde = plot_gamma3_density(em_results)
-fig_kde.show()
+#fig_kde = plot_gamma3_density(em_results)
+#fig_kde.show()
 
 
 
@@ -177,8 +188,8 @@ fig_kde.show()
 
 # %% model validations
 
-results_hierarchical["results_df"].head(20)
-results_hierarchical["results_df"].sort_values("gamma3", ascending=False).head(20)
+results_iris["results_df"].head(20)
+results_iris["results_df"].sort_values("gamma3", ascending=False).head(20)
 
 # %% Combined gamma3 density plot with TMEM184B marker
 
@@ -186,10 +197,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Extract gamma3 values for each bait
-df = results_hierarchical["results_df"]
+df = results_iris["results_df"]
 
-gamma3_v5 = df[df["bait"] == "TMEMV5"][["Protein", "gamma3"]].rename(columns={"gamma3": "gamma3_v5"})
-gamma3_myc = df[df["bait"] == "TMEMmyc"][["Protein", "gamma3"]].rename(columns={"gamma3": "gamma3_myc"})
+gamma3_v5 = df[df["BaitUnit"] == "Treat_TMEMV5"][["Protein", "gamma3"]].rename(columns={"gamma3": "gamma3_v5"})
+gamma3_myc = df[df["BaitUnit"] == "Treat_TMEMmyc"][["Protein", "gamma3"]].rename(columns={"gamma3": "gamma3_myc"})
 
 # Merge and compute the average gamma3
 merged = gamma3_v5.merge(gamma3_myc, on="Protein", how="inner")
@@ -213,21 +224,21 @@ plt.show()
 
 import os
 
-#fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/pre_tuned_gamma3_density.png", dpi=300, bbox_inches="tight")
-#fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/pre_tuned_gamma3_density.pdf", bbox_inches="tight")
+#fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/modeling/pre_tuned_gamma3_density.png", dpi=300, bbox_inches="tight")
+#fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/modeling/pre_tuned_gamma3_density.pdf", bbox_inches="tight")
 
-fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/tuned_gamma3_density.png", dpi=300, bbox_inches="tight")
-fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/tuned_gamma3_density.pdf", bbox_inches="tight")
+fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/tuned_gamma3_density.png", dpi=300, bbox_inches="tight")
+fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/tuned_gamma3_density.pdf", bbox_inches="tight")
 
 # %% Compute principled FDR-based cutoff for gamma3_avg
 
 import numpy as np
 import pandas as pd
 
-df = results_hierarchical["results_df"]
+df = results_iris["results_df"]
 
-gamma3_v5 = df[df["bait"] == "TMEMV5"][["Protein", "gamma3"]].rename(columns={"gamma3": "gamma3_v5"})
-gamma3_myc = df[df["bait"] == "TMEMmyc"][["Protein", "gamma3"]].rename(columns={"gamma3": "gamma3_myc"})
+gamma3_v5 = df[df["BaitUnit"] == "Treat_TMEMV5"][["Protein", "gamma3"]].rename(columns={"gamma3": "gamma3_v5"})
+gamma3_myc = df[df["BaitUnit"] == "Treat_TMEMmyc"][["Protein", "gamma3"]].rename(columns={"gamma3": "gamma3_myc"})
 
 merged = gamma3_v5.merge(gamma3_myc, on="Protein", how="inner")
 merged["gamma3_avg"] = (merged["gamma3_v5"] + merged["gamma3_myc"]) / 2.0
@@ -249,7 +260,7 @@ cutoff_gamma3
 import pandas as pd
 
 
-df = results_hierarchical["results_df"].copy()
+df = results_iris["results_df"].copy()
 
 # Remove unwanted columns if present
 cols_to_drop = [
@@ -269,19 +280,21 @@ df = df.merge(
 df["rank"] = df["gamma3_avg"].rank(method="dense", ascending=False).astype(int)
 
 # Sort by rank, then by protein, then by bait
-df = df.sort_values(["rank", "Protein", "bait"])
+df = df.sort_values(["rank", "Protein", "BaitUnit"])
 
 # Reorder columns for clarity
 ordered_cols = (
-    ["rank", "Protein", "bait"] +
-    [c for c in df.columns if c not in ["rank", "Protein", "bait"]]
+    ["rank", "Protein", "BaitUnit"] +
+    [c for c in df.columns if c not in ["rank", "Protein", "BaitUnit"]]
 )
 df = df[ordered_cols]
 
 ranked_interactome = df.reset_index(drop=True)
 
+ranked_interactome['BaitUnit'] = ranked_interactome['BaitUnit'].str.replace('Treat_', '', regex=True)
+
 # If you want to save:
-ranked_interactome.to_csv("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/tuned_ranked_interactome.csv", index=False)
+ranked_interactome.to_csv("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/tuned_ranked_interactome.csv", index=False)
 
 # %% Candidate interactors
 
@@ -366,11 +379,11 @@ if "TMEM184B" in merged["Protein"].dropna().values:
     hits = pd.concat([tmem_row, hits]).drop_duplicates(subset=["Protein"])
 
 # Extract raw counts
-df_raw = results_hierarchical["results_df"][["Protein", "bait", "rep1", "rep2"]]
+df_raw = results_iris["results_df"][["Protein", "BaitUnit", "rep1", "rep2"]]
 
 # Pivot to get 4 raw values per protein
-pivot = df_raw.pivot_table(index="Protein", columns="bait", values=["rep1", "rep2"])
-pivot.columns = [f"{rep}_{bait}" for rep, bait in pivot.columns]
+pivot = df_raw.pivot_table(index="Protein", columns="BaitUnit", values=["rep1", "rep2"])
+pivot.columns = [f"{rep}_{BaitUnit}" for rep, BaitUnit in pivot.columns]
 
 # Merge with hits
 hits_raw = hits.merge(pivot, on="Protein", how="left")
@@ -380,23 +393,36 @@ hits_raw = hits_raw.sort_values("gamma3_avg", ascending=False)
 
 # Select only the raw count columns
 heatmap_data = hits_raw[
-    ["rep1_TMEMV5", "rep2_TMEMV5", "rep1_TMEMmyc", "rep2_TMEMmyc"]
+    ["rep1_Treat_TMEMV5", "rep2_Treat_TMEMV5", "rep1_Treat_TMEMmyc", "rep2_Treat_TMEMmyc"]
 ]
+
+heatmap_data.columns = ["rep1_TMEMV5",
+                        "rep2_TMEMV5",
+                        "rep1_TMEMmyc",
+                        "rep2_TMEMmyc"]
 
 # Set index to protein names
 heatmap_data.index = hits_raw["Protein"]
 
 # Plot heatmap
-sns.set_style("whitegrid")
-fig = plt.figure(figsize=(8, len(heatmap_data) * 0.4))
+row_labels = heatmap_data.index.to_list()
+col_labels = heatmap_data.columns.to_list()
 
-ax = sns.heatmap(
-    heatmap_data,
-    cmap="viridis",
-    annot=True,
-    fmt=".0f",
-    cbar_kws={"label": "Raw counts"}
-)
+fig, ax = plt.subplots(figsize=(6, 10))
+
+im = ax.imshow(heatmap_data.values, aspect="auto", cmap="viridis")
+
+# x-axis: replicate names
+ax.set_xticks(np.arange(len(col_labels)))
+ax.set_xticklabels(col_labels, rotation=90, ha="right")
+
+# y-axis: protein names
+ax.set_yticks(np.arange(len(row_labels)))
+ax.set_yticklabels(row_labels)
+
+# colorbar with label
+cbar = fig.colorbar(im, ax=ax)
+cbar.set_label("Raw counts")
 
 plt.title("Raw TMEMtag counts for proteins above gamma3 cutoff")
 plt.xlabel("Replicate")
@@ -409,7 +435,7 @@ plt.show()
 import numpy as np
 import pandas as pd
 
-df = results_hierarchical["results_df"]
+df = results_iris["results_df"]
 
 # Deduplicate lambdas: one row per protein
 lambda_df = (
@@ -461,8 +487,8 @@ sns.scatterplot(
 highlight = volcano[volcano["Protein"].isin(top_hits)]
 sns.scatterplot(
     data=highlight,
-    x="SNR",
-    y="gamma3_avg",
+    x="gamma3_avg",
+    y="SNR",
     hue="Protein",
     palette="tab10",
     s=90,
@@ -474,8 +500,8 @@ plt.axhline(cutoff_gamma3, color="red", linestyle="--", linewidth=1)
 
 plt.xlabel("log2( (lambda1 + lambda2) / lambda3)\nSNR (Inverted Signal:Noise Ratio)")
 plt.ylabel("Average gamma3")
-#plt.title("Pre-tuned Hierarchical EM SNR Volcano Plot")
-plt.title("Tuned Hierarchical EM SNR Volcano Plot")
+#plt.title("Pre-tuned IRIS EM SNR Volcano Plot")
+plt.title("Tuned IRIS EM SNR Volcano Plot")
 
 ax = plt.gca()
 
@@ -491,11 +517,11 @@ plt.tight_layout()
 plt.show()
 
 
-#fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/pre_tuned_SNR_volcano.png", dpi=300, bbox_inches="tight")
-#fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/pre_tuned_SNR_volcano.pdf", bbox_inches="tight")
+#fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/pre_tuned_SNR_volcano.png", dpi=300, bbox_inches="tight")
+#fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/pre_tuned_SNR_volcano.pdf", bbox_inches="tight")
 
-fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/tuned_SNR_volcano.png", dpi=300, bbox_inches="tight")
-fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/tuned_SNR_volcano.pdf", bbox_inches="tight")
+fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/tuned_SNR_volcano.png", dpi=300, bbox_inches="tight")
+fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/tuned_SNR_volcano.pdf", bbox_inches="tight")
 
 # %% Volcano with marginal histograms
 
@@ -600,7 +626,7 @@ sns.set_style("whitegrid")
 # -----------------------------
 # Volcano prep
 # -----------------------------
-df = results_hierarchical["results_df"]
+df = results_iris["results_df"]
 
 lambda_df = (
     df[["Protein", "lambda1", "lambda2", "lambda3"]]
@@ -630,10 +656,12 @@ highlight = volcano[volcano["Protein"].isin(top_hits)]
 # -----------------------------
 # Heatmap prep (TMEM + top 25 + bottom 10)
 # -----------------------------
-df_raw = df[["Protein", "bait", "rep1", "rep2"]]
+df_raw = df[["Protein", "BaitUnit", "rep1", "rep2"]]
 
-pivot = df_raw.pivot_table(index="Protein", columns="bait", values=["rep1", "rep2"])
-pivot.columns = [f"{rep}_{bait}" for rep, bait in pivot.columns]
+df_raw['BaitUnit'] = df_raw['BaitUnit'].str.replace('Treat_', '', regex=True)   
+
+pivot = df_raw.pivot_table(index="Protein", columns="BaitUnit", values=["rep1", "rep2"])
+pivot.columns = [f"{rep}_{BaitUnit}" for rep, BaitUnit in pivot.columns]
 
 hits = merged.copy()
 
@@ -716,7 +744,7 @@ ax.xaxis.set_major_formatter(plt.FormatStrFormatter('%.2f'))
 ax.set_xlabel("log2( (lambda1 + lambda2) / lambda3)\nSNR (Inverted Signal:Noise Ratio)")
 ax.set_ylabel("Average gamma3")
 #ax.set_title("Pre-tuned Hierarchical EM SNR Volcano Plot")
-ax.set_title("Tuned Hierarchical EM SNR Volcano Plot")
+ax.set_title("Tuned IRIS EM SNR Volcano Plot")
 
 
 # ---- Staggered Heatmap (right) ----
@@ -751,5 +779,18 @@ plt.show()
 #fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/pre_tuned_volcano_heatmap.png", dpi=300, bbox_inches="tight")
 #fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/modeling/pre_tuned_volcano_heatmap.pdf", bbox_inches="tight")
 
-fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/python/tuned_volcano_heatmap.png", dpi=300, bbox_inches="tight")
-fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/Endo/analysis/python/tuned_volcano_heatmap.pdf", bbox_inches="tight")
+fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/tuned_volcano_heatmap.png", dpi=300, bbox_inches="tight")
+fig.savefig("C:/Users/Erik/Desktop/Programming/R/Bio/ORION/analysis/python/tuned_volcano_heatmap.pdf", bbox_inches="tight")
+
+# %% Compare the models
+
+from orion.utils.comparison import compare_posteriors
+from orion.utils.comparison import diagnostic_panel
+
+comp_df = compare_posteriors(saint_df = df_saint, iris_df = df_iris)
+
+diagnostic_panel(df = comp_df,
+                 saint_col='SAINT_gamma',
+                 iris_col='IRIS_gamma',
+                 protein_col='Protein',
+                 controls=['birA', 'GFP', 'TMEM184B'])
