@@ -12,7 +12,7 @@ __pycache__/
 .Ruserdata
 
 # RStudio / R project noise
-*.Rproj
+/*.Rproj
 .Rproj.user/
 coherence.md
 
